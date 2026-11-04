@@ -1,11 +1,15 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 6;
+pub const VERSION: u8 = 7;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    RestoreSalvageYard {
+        protocol_version: u8,
+        island_id: String,
+    },
     RestoreFuelFacility {
         protocol_version: u8,
         island_id: String,
@@ -83,6 +87,8 @@ fn serialize_snapshot<S: serde::Serializer>(
     #[derive(Serialize)]
     struct Snapshot<'a> {
         economy: EconomySnapshot<'a>,
+        #[serde(serialize_with = "serialize_salvage")]
+        salvage: &'a Option<crate::salvage::Salvage>,
         objective_complete: bool,
         shipping_links: Vec<ShippingLink<'a>>,
         revision: u64,
@@ -111,6 +117,7 @@ fn serialize_snapshot<S: serde::Serializer>(
         }
     }
     Snapshot {
+        salvage: &world.salvage,
         objective_complete: world.objective_complete(),
         shipping_links,
         economy: EconomySnapshot {
@@ -150,6 +157,25 @@ fn serialize_snapshot<S: serde::Serializer>(
     .serialize(serializer)
 }
 
+fn serialize_salvage<S: serde::Serializer>(
+    salvage: &Option<crate::salvage::Salvage>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    struct Snapshot<'a> {
+        #[serde(flatten)]
+        data: &'a crate::salvage::Salvage,
+        rules: crate::salvage::Rules,
+    }
+    salvage
+        .as_ref()
+        .map(|data| Snapshot {
+            data,
+            rules: crate::salvage::Rules::default(),
+        })
+        .serialize(serializer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,7 +197,12 @@ mod tests {
     }
     #[test]
     fn snapshots_derive_links_production_and_objective_without_persisting_them() {
-        let mut world = WorldState::default();
+        let mut world = WorldState {
+            salvage: None,
+            ..WorldState::default()
+        };
+        world.islands.truncate(4);
+        world.lighthouses.truncate(4);
         for light in &mut world.lighthouses {
             light.active = true;
         }

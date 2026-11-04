@@ -142,3 +142,21 @@ The objective requires all facilities restored, all beacons connected and active
 and production at least equal to upkeep. It is a live condition, not a latched win.
 Ships move along links as presentation only, pause with simulation, and respect
 reduced motion. There are no inventories, travel delays, or fleet commands.
+
+## Strategic Salvage expansion milestone
+
+Implemented the six-island economy with a persistent optional Salvage ruleset.
+`salvage: null` selects legacy behavior; new games contain two specialized yards,
+a Haven recovery producer, and paid radius expansion. Rust owns local and shared
+inventories, production timers, shortest-path routing, and cargo progress. The
+snapshot adds centralized construction/shipping rules alongside Salvage state;
+the client validates protocol 7 and renders ships from that state. Save format 5
+preserves deliveries in transit. Loading formats 1–4 explicitly selects legacy
+rules without inserting new islands or charging for old expansion actions.
+
+Yard restoration and spending run under the existing simulation mutex. A repeated
+restoration is a no-op. Ships freeze on unsafe legs and keep their cargo; full
+Haven storage blocks unloading. Pause, disconnected-session suspension, and
+save/load use the existing simulation lifecycle. Domain playthrough tests cover
+both fuel-first and salvage-first strategies, recovery from spent construction
+reserves, interrupted deliveries, storage limits, and transit save/load.

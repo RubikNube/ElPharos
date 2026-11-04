@@ -1,6 +1,7 @@
 pub mod domain;
 pub mod persistence;
 pub mod protocol;
+pub mod salvage;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -124,7 +125,10 @@ async fn snapshot(socket: &mut WebSocket, updates: &mut watch::Receiver<WorldSta
 fn execute(state: &AppState, command: ClientMessage) -> (Option<String>, Result<(), String>) {
     let mut clock = state.gate.lock().unwrap_or_else(|e| e.into_inner());
     let version = match &command {
-        ClientMessage::RestoreFuelFacility {
+        ClientMessage::RestoreSalvageYard {
+            protocol_version, ..
+        }
+        | ClientMessage::RestoreFuelFacility {
             protocol_version, ..
         }
         | ClientMessage::SetSimulationPaused {
@@ -185,6 +189,9 @@ fn execute(state: &AppState, command: ClientMessage) -> (Option<String>, Result<
             let mut result = Ok(());
             state.world.send_if_modified(|world| {
                 let change = match command {
+                    ClientMessage::RestoreSalvageYard { island_id, .. } => {
+                        world.restore_salvage_yard(&island_id)
+                    }
                     ClientMessage::RestoreFuelFacility { island_id, .. } => {
                         world.restore_fuel_facility(&island_id)
                     }

@@ -70,6 +70,29 @@ try:
     js("document.querySelector('.pause').click()")
     time.sleep(.2)
     assert js("return document.body.innerText.includes('Simulation running')")
+    assert js("return document.body.innerText.includes('Salvage: 100 / 300')")
+    js("document.querySelector('.save-controls button').click()")
+    time.sleep(.2)
+    pristine = Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text()
+    js("Array.from(document.querySelectorAll('nav button')).find(b => b.innerText.includes('Wreckers')).click()")
+    assert js("return document.querySelector('[aria-label=\"Salvage yard\"]').innerText.includes('120 fuel + 40 Salvage')")
+    js("document.querySelector('[aria-label=\"Salvage yard\"] button').click()")
+    time.sleep(.2)
+    assert js("return document.body.innerText.includes('Salvage: 60 / 300')")
+    js("document.querySelector('.primary').click()")
+    for _ in range(150):
+        if js("return document.querySelector('[aria-label=\"Salvage yard\"]').innerText.includes('Delivering to Haven')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('No authoritative cargo delivery')
+    screenshot('cargo-delivery')
+    for _ in range(150):
+        if js("return document.body.innerText.includes('1/2 yards have delivered cargo')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Cargo never arrived')
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(pristine)
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.3)
+    js("document.querySelectorAll('nav button')[0].click()")
     initial = screenshot('lit')
     js("document.querySelector('.primary').click()")
     time.sleep(.3)
@@ -78,7 +101,7 @@ try:
     assert dark != initial
     js("document.querySelector('.primary').click()")
     time.sleep(.3)
-    assert js("return document.querySelectorAll('nav button').length") == 1
+    assert js("return document.querySelectorAll('nav button').length") == 3
     assert js("return document.querySelector('.upgrade-preview').innerText.includes('1.25 fuel/s')")
     js("document.querySelector('.expand').click()")
     time.sleep(.2)
@@ -91,7 +114,7 @@ try:
     for _ in range(3):
         js("document.querySelector('.expand').click()")
         time.sleep(.15)
-    assert js("return document.querySelectorAll('nav button').length") == 2
+    assert js("return document.querySelectorAll('nav button').length") == 4
     js("document.querySelectorAll('nav button')[1].click()")
     assert js("return document.querySelector('h2').innerText.includes('Amber Shoal')")
     js("document.querySelector('.primary').click()")
@@ -116,7 +139,7 @@ try:
     # Extinguishing preserves discovered entries.
     js("document.querySelector('.primary').click()")
     time.sleep(.2)
-    assert js("return document.querySelectorAll('nav button').length") == 2
+    assert js("return document.querySelectorAll('nav button').length") == 4
     assert js("return document.querySelector('.fuel-facility').innerText.includes('Isolated · +0 fuel/s')")
     assert js("return document.querySelector('.economy').innerText.includes('Production: +2/s')")
     before = screenshot('before-pan')
@@ -160,6 +183,11 @@ try:
     js("document.querySelector('.primary').click()")
     time.sleep(.3)
     assert js("return document.body.innerText.includes('Beacon illuminated') && !document.body.innerText.includes('Fuel shortage extinguished every beacon')")
+    # Old saves retain the original scenario and free radius expansion.
+    fixture['save_version'] = 4
+    fixture['world'].pop('salvage', None)
+    fixture['world']['islands'] = fixture['world']['islands'][:4]
+    fixture['world']['lighthouses'] = fixture['world']['lighthouses'][:4]
     # Complete the scenario through gameplay controls from a fresh paused world.
     fixture['world']['economy'].update(fuel=300, paused=True, blackout=False)
     for island in fixture['world']['islands'][1:]:

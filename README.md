@@ -5,7 +5,10 @@ The [handover](El_Pharos_Project_Handover.md) is the project vision; the
 [implementation plan](docs/implementation-plan.md) explains this session's scope,
 decisions, protocol, and acceptance criteria.
 
-The playable archipelago contains four server-owned islands and lighthouses.
+New games contain six islands, including two salvage yards with automatic cargo
+deliveries. See **Salvage and cargo expansion** below for the new economy.
+Older saves retain the original four-island scenario described in the following
+legacy gameplay sections. The playable archipelago is server-owned.
 Select discovered beacons on the map or in the side panel, activate them, and
 expand their radii to reveal the next island. Connected tabs share the same
 world. Exploration remains dimly visible after a beacon is extinguished.
@@ -200,3 +203,40 @@ python3 tests/browser_smoke.py
 This starts local services on isolated temporary ports, uses an isolated
 temporary save slot, and checks discovery, selection, expansion, save/load,
 camera interaction, fuel display, shared pause, blackout recovery, StrictMode cleanup, and mobile overflow. Screenshots and process logs are written under `/tmp/el-pharos-*`.
+
+## Salvage and cargo expansion
+
+New games now contain six islands. Wreckers' Cove and Iron Shoal offer competing
+salvage-yard investments; both are visible in the starting light. **Salvage** is
+recovered metal used to reinforce towers and repair yard machinery. First Haven
+starts with 100 Salvage (capacity 300), and its salvage operation adds 1 every
+10 simulation seconds, including during blackouts. Radius expansions cost 20
+Salvage in addition to their ongoing fuel upkeep. Existing fuel facilities still
+cost 120 fuel to restore.
+
+Restore a salvage yard for 120 fuel and 40 Salvage under connected illumination.
+Wreckers' Cove produces 1 Salvage every 4 seconds; farther Iron Shoal produces 1
+every 2 seconds. Yards operate only while their beacon is connected and hold up
+to 60 locally. Restoration includes an automatic ship carrying up to 20 Salvage
+to Haven at 60 world units/second, returning empty. Ships depart with any cargo
+available and follow the shortest safe path through the beacon network. Production
+at a full inventory is discarded. A ship retains cargo if Haven storage is full.
+Disconnected shipping legs freeze in place and resume when safe. Routes are
+recalculated at beacon arrivals; partial-tick travel remaining after arrival is
+discarded. Cargo delivery/unloading occurs on the following simulation tick.
+
+The panel shows stock, cargo, estimated sailing time, and route interruptions.
+The mint outline around a selected beacon previews the next expansion, with
+rings around discovered islands that it would newly reach. Gold ships carry
+cargo; pale blue ships are empty. Ships interpolate at most one tick beyond the
+latest server snapshot and respect pause and reduced-motion preferences.
+
+New objectives include restoring both yards and receiving a delivery from each,
+as well as restoring the three fuel facilities and connecting all six beacons
+with sustainable fuel. Saves use format 5 and preserve production timers and
+cargo in transit. Formats 1–4 retain their original map, free expansion, and
+objective under a legacy ruleset, which remains in effect after saving again.
+Wire protocol 7 requires matching client and server versions. The older sections
+above describe the original four-island scenario; these rules supersede them for
+new games. Balance constants live in `apps/server/src/salvage.rs` and are included
+in snapshots for the interface.

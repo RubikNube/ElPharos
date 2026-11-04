@@ -19,7 +19,7 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
   let world: WorldState | null = null;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
   let fitted = false;
-  let ships: { graphic: Graphics; from: { x: number; y: number }; to: { x: number; y: number }; offset: number }[] = [];
+  let ships: { graphic: Graphics; from: { x: number; y: number }; to: { x: number; y: number }; offset: number; cargo?: NonNullable<WorldState['salvage']>['ships'][number]; safe?: boolean }[] = [];
   let animationFrame = 0;
   let snapshotTime = performance.now();
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -28,6 +28,14 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
     const seconds = (world?.economy.elapsed_seconds ?? 0) +
       (world?.economy.paused || reducedMotion.matches ? 0 : (now - snapshotTime) / 1000);
     for (const ship of ships) {
+      if (ship.cargo) {
+        const elapsed = world?.economy.paused || reducedMotion.matches || !ship.safe ? 0 : Math.min(1, (now - snapshotTime) / 1000);
+        const length = Math.hypot(ship.to.x-ship.from.x, ship.to.y-ship.from.y);
+        const progress = Math.min(1, ship.cargo.progress + (length ? elapsed * (world?.salvage?.rules.speed ?? 60) / length : 0));
+        ship.graphic.position.set(ship.from.x + (ship.to.x-ship.from.x)*progress, ship.from.y + (ship.to.y-ship.from.y)*progress);
+        ship.graphic.rotation = Math.atan2(ship.to.y-ship.from.y, ship.to.x-ship.from.x);
+        continue;
+      }
       const phase = ((seconds / 16 + ship.offset) % 2);
       const progress = phase <= 1 ? phase : 2 - phase;
       ship.graphic.position.set(ship.from.x + (ship.to.x - ship.from.x) * progress,
@@ -136,13 +144,29 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
       if (!from || !to || !isDiscovered(world, from.position) || !isDiscovered(world, to.position)) continue;
       worldLayer.addChild(new Graphics().moveTo(from.position.x, from.position.y)
         .lineTo(to.position.x, to.position.y).stroke({ color: 0xffd34d, alpha: 0.45, width: 2 }));
+      if (world.salvage) continue;
       const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(0xffedb3)
         .stroke({ color: 0x081521, width: 2 });
       worldLayer.addChild(graphic);
       ships.push({ graphic, from: from.position, to: to.position, offset: index * 0.37 });
     }
+    for (const cargo of world.salvage?.ships ?? []) {
+      const from = world.lighthouses.find(l => l.id === cargo.from), to = world.lighthouses.find(l => l.id === cargo.to);
+      if (!from || !to || !isDiscovered(world, from.position)) continue;
+      const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(cargo.cargo ? 0xf3b45c : 0xadc7d7).stroke({color: 0x081521, width: 2});
+      worldLayer.addChild(graphic);
+      ships.push({graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && Math.hypot(from.position.x-to.position.x, from.position.y-to.position.y) <= from.radius+to.radius});
+    }
     const selected = world.lighthouses.find(light => light.id === useWorldStore.getState().selectedId && isDiscovered(nextWorld, light.position));
     if (selected) worldLayer.addChild(new Graphics().circle(selected.position.x, selected.position.y, 45).stroke({ color: 0xffffff, width: 3 }));
+    if (selected && selected.radius < world.radius_max) {
+      const radius = Math.min(world.radius_max, selected.radius + world.radius_step);
+      worldLayer.addChild(new Graphics().circle(selected.position.x, selected.position.y, radius).stroke({color: 0x9ae6d1, width: 2, alpha: 0.65}));
+      for (const island of world.islands) {
+        const distance = Math.hypot(island.position.x-selected.position.x, island.position.y-selected.position.y);
+        if (isDiscovered(world, island.position) && distance > selected.radius && distance <= radius) worldLayer.addChild(new Graphics().circle(island.position.x, island.position.y, island.radius+8).stroke({color: 0x9ae6d1, width: 3}));
+      }
+    }
     if (!fitted) { fitted = true; reset(); }
     updateAnimation();
   }

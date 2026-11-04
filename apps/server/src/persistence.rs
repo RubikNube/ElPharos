@@ -83,6 +83,7 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
             return Err("Invalid lighthouse or exploration".into());
         }
     }
+    crate::salvage::validate(world)?;
     Ok(())
 }
 
@@ -96,7 +97,7 @@ pub fn save(path: &Path, world: &WorldState) -> Result<(), String> {
     let temp = path.with_extension("json.tmp");
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let data = serde_json::to_vec_pretty(&Save {
-            save_version: 4,
+            save_version: 5,
             world: world.clone(),
         })?;
         let mut file = fs::File::create(&temp)?;
@@ -124,7 +125,7 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
     let legacy_version = value["save_version"]
         .as_u64()
         .ok_or("Invalid save version")?;
-    if !(1..=4).contains(&legacy_version) {
+    if !(1..=5).contains(&legacy_version) {
         return Err("Unsupported save version".into());
     }
     // Legacy saves have no economy; migration is restricted to version 1.
@@ -176,8 +177,19 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
         }
         value["save_version"] = 4.into();
     }
+    if legacy_version == 5 && value["world"].get("salvage").is_none() {
+        return Err("Missing Salvage ruleset".into());
+    }
+    if legacy_version <= 4 {
+        value
+            .get_mut("world")
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or("Invalid legacy world")?
+            .insert("salvage".into(), serde_json::Value::Null);
+        value["save_version"] = 5.into();
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
-    if save.save_version != 4 {
+    if save.save_version != 5 {
         return Err("Unsupported save version".into());
     }
     validate(&save.world)?;
@@ -211,6 +223,19 @@ mod tests {
         fs::write(&path, br#"{"save_version":99,"world":{}}"#).unwrap();
         assert!(load(&path).is_err());
         assert!(save(&dir, &loaded).is_err());
+        for world in [
+            serde_json::json!(7),
+            serde_json::json!([]),
+            serde_json::Value::Null,
+        ] {
+            fs::write(
+                &path,
+                serde_json::to_vec(&serde_json::json!({"save_version": 4, "world": world}))
+                    .unwrap(),
+            )
+            .unwrap();
+            assert!(load(&path).is_err());
+        }
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -278,7 +303,7 @@ mod economy_tests {
             serde_json::to_value(&world).unwrap()
         );
         let written: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(written["save_version"], 4);
+        assert_eq!(written["save_version"], 5);
         assert!(
             written["world"]["lighthouses"][0]
                 .get("fuel_upkeep")
