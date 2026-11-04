@@ -313,7 +313,7 @@ mod facility_tests {
         save(&path, &world).unwrap();
         let saved: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert!(saved["world"]["economy"].get("production").is_none());
-        assert_eq!(load(&path).unwrap().production(), 5);
+        assert_eq!(load(&path).unwrap().production(), 2);
         for state in ["missing", "haven"] {
             let mut invalid = saved.clone();
             invalid["world"]["islands"][1]["fuel_facility"] = state.into();

@@ -14,11 +14,45 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
   });
   if (signal.aborted) { app.destroy(true, { children: true }); return null; }
   host.appendChild(app.canvas);
-  const worldLayer = new Container();
+  let worldLayer = new Container({ isRenderGroup: true });
   app.stage.addChild(worldLayer);
   let world: WorldState | null = null;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
   let fitted = false;
+  let ships: { graphic: Graphics; from: { x: number; y: number }; to: { x: number; y: number }; offset: number }[] = [];
+  let animationFrame = 0;
+  let snapshotTime = performance.now();
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function positionShips(now: number) {
+    const seconds = (world?.economy.elapsed_seconds ?? 0) +
+      (world?.economy.paused || reducedMotion.matches ? 0 : (now - snapshotTime) / 1000);
+    for (const ship of ships) {
+      const phase = ((seconds / 16 + ship.offset) % 2);
+      const progress = phase <= 1 ? phase : 2 - phase;
+      ship.graphic.position.set(ship.from.x + (ship.to.x - ship.from.x) * progress,
+        ship.from.y + (ship.to.y - ship.from.y) * progress);
+      ship.graphic.rotation = Math.atan2(ship.to.y - ship.from.y, ship.to.x - ship.from.x) + (phase > 1 ? Math.PI : 0);
+    }
+  }
+  let lastFrame = 0;
+  function animate(now: number) {
+    if (now - lastFrame >= 1000 / 30) {
+      lastFrame = now;
+      positionShips(now);
+      render();
+    }
+    animationFrame = requestAnimationFrame(animate);
+  }
+  function updateAnimation() {
+    cancelAnimationFrame(animationFrame);
+    if (ships.length && !world?.economy.paused && !reducedMotion.matches) {
+      animationFrame = requestAnimationFrame(animate);
+    }
+    positionShips(performance.now());
+    render();
+  }
+  reducedMotion.addEventListener('change', updateAnimation);
 
   function render() {
     worldLayer.position.set(camera.x, camera.y);
@@ -35,7 +69,13 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
   }
   function draw(next: WorldState | null) {
     world = next;
-    for (const child of worldLayer.removeChildren()) child.destroy({ children: true });
+    snapshotTime = performance.now();
+    ships = [];
+    cancelAnimationFrame(animationFrame);
+    app.stage.removeChild(worldLayer);
+    worldLayer.destroy({ children: true });
+    worldLayer = new Container({ isRenderGroup: true });
+    app.stage.addChild(worldLayer);
     if (!world) { render(); return; }
     const nextWorld = world;
     function terrainLayer() {
@@ -89,9 +129,22 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
       worldLayer.addChild(terrain, mask);
       terrain.mask = mask;
     }
+    // Server-owned links always lie inside the union of connected light circles.
+    for (const [index, link] of world.shipping_links.entries()) {
+      const from = world.lighthouses.find(light => light.id === link.from);
+      const to = world.lighthouses.find(light => light.id === link.to);
+      if (!from || !to || !isDiscovered(world, from.position) || !isDiscovered(world, to.position)) continue;
+      worldLayer.addChild(new Graphics().moveTo(from.position.x, from.position.y)
+        .lineTo(to.position.x, to.position.y).stroke({ color: 0xffd34d, alpha: 0.45, width: 2 }));
+      const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(0xffedb3)
+        .stroke({ color: 0x081521, width: 2 });
+      worldLayer.addChild(graphic);
+      ships.push({ graphic, from: from.position, to: to.position, offset: index * 0.37 });
+    }
     const selected = world.lighthouses.find(light => light.id === useWorldStore.getState().selectedId && isDiscovered(nextWorld, light.position));
     if (selected) worldLayer.addChild(new Graphics().circle(selected.position.x, selected.position.y, 45).stroke({ color: 0xffffff, width: 3 }));
-    if (!fitted) { fitted = true; reset(); } else render();
+    if (!fitted) { fitted = true; reset(); }
+    updateAnimation();
   }
 
   let drag: { id: number; x: number; y: number; startX: number; startY: number; moved: boolean } | null = null;
@@ -160,6 +213,8 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
   return {
     reset, zoom,
     dispose() {
+      cancelAnimationFrame(animationFrame);
+      reducedMotion.removeEventListener('change', updateAnimation);
       unsubscribe(); observer.disconnect();
       host.removeEventListener('pointerdown', down);
       host.removeEventListener('pointermove', move);

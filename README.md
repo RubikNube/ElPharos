@@ -61,13 +61,13 @@ is allowed even if reserves cannot cover the increased upkeep. Its new rate appl
 on the next tick. Fuel balances are tracked in exact quarter units.
 
 Each other island has one ruined fuel facility. Select its lighthouse to see the
-facility controls. **Restore fuel facility** costs **120 fuel** and immediately adds
-**3 fuel/second** to shared production. The island center must currently be inside
-an active beacon's radius; remembered exploration alone is insufficient. Restored
-facilities keep producing in darkness and during blackouts. Restoration is allowed
+facility controls. **Restore fuel facility** costs **120 fuel** and enables
+**3 fuel/second** while its beacon is connected. The island center must currently be inside
+a connected beacon's radius; remembered exploration alone is insufficient. Restored
+facilities produce only while their own beacon is active and connected to First Light through overlapping active light circles. First Haven always produces 2 fuel/second, including during blackouts. Restoration is allowed
 while paused, with production taking effect on the next tick. Repeated restoration
 requests never charge twice. There are no further facility levels or refunds.
-Restoring all three facilities gives **11 fuel/second**, enough for four maximum-radius
+Connecting all three restored facilities gives **11 fuel/second**, enough for four maximum-radius
 beacons at **10 fuel/second**. Fuel capacity remains 600.
 
 The server advances one second at a time while at least one player is connected.
@@ -78,14 +78,28 @@ catch-up, and missed timer ticks are skipped.
 
 Each tick adds production up to capacity, then pays upkeep. If the reserve cannot
 pay the whole network, all remaining fuel is consumed and every beacon goes out.
-Exploration is preserved and production continues. Relight beacons manually once
+Exploration is preserved and First Haven production continues. Relight beacons manually once
 fuel covers one second of the resulting network's upkeep; they do not restart
 automatically. The side panel shows fuel, rates, pause status, and shortage feedback.
 
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
 preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
-New saves use format 4 and persist facilities rather than derived production. Wire protocol 5 requires matching client and server versions.
+New saves use format 4 and persist facilities rather than derived production. Wire protocol 6 requires matching client and server versions.
+
+## Connected shipping and scenario goal
+
+First Light anchors the network. Active beacons connect automatically when their
+circles overlap or touch, including through chains of other active beacons.
+Golden links and moving ships show these safe corridors; shipping has no cargo
+inventories, travel delay, or fleet controls. Restored remote facilities stop
+producing when their beacon goes dark or loses its connection. Relighting the
+chain resumes production on the next tick. Connectivity and effective production
+are derived after every change and after loading; existing saves adopt these rules.
+
+Restore all three remote facilities and connect all four active beacons with
+nonnegative net fuel to complete the scenario. The objective panel tracks progress;
+completion reflects the current network and play continues afterward.
 
 ## Structure and responsibilities
 
@@ -128,8 +142,8 @@ connection status. React owns the interface; Pixi owns the map and camera. No
 simulation or default world is duplicated in the client.
 
 World geometry uses arbitrary world units, with positive y pointing down. The
-camera is local presentation state and never changes the domain. Pixi runs on
-demand instead of maintaining an idle animation loop. Its canvas, observers,
+camera is local presentation state and never changes the domain. Pixi renders on
+demand except while shipping links animate. Shipping pauses with the simulation and respects reduced-motion preferences. Its canvas, observers,
 listeners, and subscriptions are cleaned up on unmount, including React
 StrictMode's asynchronous mount/unmount cycle.
 

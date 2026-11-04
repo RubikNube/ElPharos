@@ -41,7 +41,7 @@ export function connectWorld() {
         useWorldStore.setState({ selectedId: selected?.id ?? null, world: message.world, connection: 'connected' });
       } catch {
         useWorldStore.setState({ error: 'Received an incompatible world. Check that client and server versions match.' });
-        current.close(1002, 'Invalid server message');
+        current.close(4002, 'Invalid server message');
       }
     };
     current.onerror = () => {

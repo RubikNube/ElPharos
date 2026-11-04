@@ -148,11 +148,82 @@ impl Default for WorldState {
 }
 
 impl WorldState {
+    /// Active circles joined to the Haven beacon, including boundary contact.
+    pub fn connected_beacons(&self) -> Vec<bool> {
+        let mut connected = vec![false; self.lighthouses.len()];
+        for (i, light) in self.lighthouses.iter().enumerate() {
+            connected[i] = light.active
+                && self.islands.iter().any(|island| {
+                    island.id == light.island_id && island.fuel_facility == FuelFacility::Haven
+                });
+        }
+        loop {
+            let mut changed = false;
+            for (i, light) in self.lighthouses.iter().enumerate() {
+                if light.active
+                    && !connected[i]
+                    && self
+                        .lighthouses
+                        .iter()
+                        .enumerate()
+                        .any(|(j, other)| connected[j] && Self::overlap(light, other))
+                {
+                    connected[i] = true;
+                    changed = true;
+                }
+            }
+            if !changed {
+                return connected;
+            }
+        }
+    }
+
+    pub fn overlap(a: &Lighthouse, b: &Lighthouse) -> bool {
+        (a.position.x - b.position.x).hypot(a.position.y - b.position.y) <= a.radius + b.radius
+    }
+
+    pub fn facility_production(&self, island: &Island, connected: &[bool]) -> u32 {
+        match island.fuel_facility {
+            FuelFacility::Haven => 2,
+            FuelFacility::Ruined => 0,
+            FuelFacility::Restored => {
+                if self
+                    .lighthouses
+                    .iter()
+                    .enumerate()
+                    .any(|(i, light)| light.island_id == island.id && connected[i])
+                {
+                    3
+                } else {
+                    0
+                }
+            }
+        }
+    }
+
     pub fn production(&self) -> u32 {
+        let connected = self.connected_beacons();
         self.islands
             .iter()
-            .map(|island| island.fuel_facility.production())
+            .map(|island| self.facility_production(island, &connected))
             .sum()
+    }
+
+    pub fn objective_complete(&self) -> bool {
+        self.islands
+            .iter()
+            .all(|island| island.fuel_facility != FuelFacility::Ruined)
+            && self.connected_beacons().iter().all(|connected| *connected)
+            && f64::from(self.production()) >= self.upkeep()
+    }
+
+    pub fn is_network_illuminated(&self, position: &Point) -> bool {
+        let connected = self.connected_beacons();
+        self.lighthouses.iter().enumerate().any(|(i, light)| {
+            connected[i]
+                && (position.x - light.position.x).hypot(position.y - light.position.y)
+                    <= light.radius
+        })
     }
 
     pub fn is_illuminated(&self, position: &Point) -> bool {
@@ -172,8 +243,8 @@ impl WorldState {
         if self.islands[index].fuel_facility != FuelFacility::Ruined {
             return Ok(false);
         }
-        if !self.is_illuminated(&self.islands[index].position) {
-            return Err("Island must be illuminated to restore its fuel facility");
+        if !self.is_network_illuminated(&self.islands[index].position) {
+            return Err("Island must have connected illumination to restore its fuel facility");
         }
         if self.economy.fuel < f64::from(FACILITY_RESTORE_COST) {
             return Err("Not enough fuel to restore facility");
@@ -448,7 +519,7 @@ mod facility_tests {
         let revision = w.revision;
         assert_eq!(w.restore_fuel_facility("island-2"), Ok(true));
         assert_eq!(w.economy.fuel, 0.);
-        assert_eq!(w.production(), 5);
+        assert_eq!(w.production(), 2);
         assert_eq!(w.revision, revision + 1);
         w.set_lighthouse_active("beacon-1", false).unwrap();
         let revision = w.revision;
@@ -458,11 +529,11 @@ mod facility_tests {
         assert!(!w.tick());
         w.set_paused(false);
         w.tick();
-        assert_eq!(w.economy.fuel, 5.);
+        assert_eq!(w.economy.fuel, 2.);
     }
 
     #[test]
-    fn remembered_light_does_not_allow_restoration_and_blackout_keeps_production() {
+    fn remembered_light_blocks_restoration_and_blackout_keeps_haven_production() {
         let mut w = WorldState::default();
         w.islands[1].position = Point { x: 800., y: 500. };
         w.set_lighthouse_active("beacon-1", false).unwrap();
@@ -478,11 +549,11 @@ mod facility_tests {
         w.tick();
         assert!(w.economy.blackout);
         w.tick();
-        assert_eq!(w.economy.fuel, 5.);
+        assert_eq!(w.economy.fuel, 2.);
         for island in &mut w.islands[2..] {
             island.fuel_facility = FuelFacility::Restored;
         }
-        assert_eq!(w.production(), 11);
+        assert_eq!(w.production(), 2);
         w.economy.fuel = 600.;
         for light in &mut w.lighthouses {
             light.active = true;
@@ -490,5 +561,71 @@ mod facility_tests {
         w.tick();
         assert_eq!(w.economy.fuel, 590.);
         assert_eq!(w.upkeep(), 10.);
+    }
+}
+
+#[cfg(test)]
+mod network_tests {
+    use super::*;
+
+    fn restored_network() -> WorldState {
+        let mut w = WorldState::default();
+        for light in &mut w.lighthouses {
+            light.active = true;
+            light.explored_radius = light.radius;
+        }
+        for island in &mut w.islands[1..] {
+            island.fuel_facility = FuelFacility::Restored;
+        }
+        w
+    }
+
+    #[test]
+    fn chains_disconnect_reconnect_and_complete_objective() {
+        let mut w = restored_network();
+        assert_eq!(w.connected_beacons(), vec![true; 4]);
+        assert_eq!(w.production(), 11);
+        assert!(w.objective_complete());
+        w.lighthouses[1].active = false;
+        assert_eq!(w.connected_beacons(), vec![true, false, false, false]);
+        assert_eq!(w.production(), 2);
+        assert!(!w.objective_complete());
+        w.economy.fuel = 100.;
+        w.tick();
+        assert_eq!(w.economy.fuel, 99.);
+        w.lighthouses[1].active = true;
+        w.tick();
+        assert_eq!(w.economy.fuel, 106.);
+        assert!(w.objective_complete());
+        w.islands[3].fuel_facility = FuelFacility::Ruined;
+        assert!(!w.objective_complete());
+    }
+
+    #[test]
+    fn touching_circles_connect_but_gaps_and_inactive_anchors_do_not() {
+        let mut w = restored_network();
+        w.lighthouses[1].position = Point { x: 1380., y: 480. };
+        assert!(w.connected_beacons()[1]);
+        w.lighthouses[1].position.x += 0.01;
+        assert!(!w.connected_beacons()[1]);
+        w.lighthouses[0].active = false;
+        assert_eq!(w.connected_beacons(), vec![false; 4]);
+        assert_eq!(w.production(), 2);
+    }
+
+    #[test]
+    fn isolated_light_cannot_restore_even_when_island_is_illuminated() {
+        let mut w = WorldState::default();
+        w.lighthouses[3].active = true;
+        assert!(w.is_illuminated(&w.islands[3].position));
+        let before = serde_json::to_value(&w).unwrap();
+        assert!(w.restore_fuel_facility("island-4").is_err());
+        assert_eq!(serde_json::to_value(&w).unwrap(), before);
+        w.lighthouses[3].active = false;
+        w.lighthouses[0].radius = 530.;
+        assert_eq!(w.restore_fuel_facility("island-2"), Ok(true));
+        assert_eq!(w.production(), 2);
+        w.set_lighthouse_active("beacon-2", true).unwrap();
+        assert_eq!(w.production(), 5);
     }
 }

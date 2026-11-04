@@ -22,9 +22,9 @@ Selection is client-local. Map clicks use a six-pixel movement threshold; draggi
 does not select. The accessible panel list offers the same selections. Selection
 survives snapshots and reconnects if the entity still exists and is discovered.
 
-## Wire protocol 5
+## Wire protocol 6
 
-Every command includes `protocol_version: 5`.
+Every command includes `protocol_version: 6`.
 
 - `restore_fuel_facility`: `island_id` (atomic 120-fuel restoration; already operational is a no-op).
 - `set_simulation_paused`: `paused` (shared, idempotent).
@@ -115,10 +115,11 @@ retain `economy.production`, add `economy.facility_restore_cost` (120), and incl
 each island's state and derived `fuel_production`.
 
 Restoration deducts 120 fuel once under the simulation mutex. The island center
-must be within the inclusive radius of any active beacon. Exploration alone does
+must be within the inclusive radius of a beacon connected to First Light. Exploration alone does
 not qualify. Unknown IDs, insufficient reserves, and darkness leave state unchanged;
 already operational facilities succeed without a charge or revision. Production
-continues through darkness and blackouts and follows existing pause/session rules.
+requires the facility’s active beacon to connect to First Light. Haven production
+continues through blackouts. All production follows existing pause/session rules.
 The contextual lighthouse panel shows its island's facility and blocking reasons.
 
 Format 4 stores facility states and omits derived production. Formats 1–3 migrate
@@ -126,3 +127,18 @@ with their first island designated Haven and the others ruined, preserving the
 previous geometry, fuel, and simulation state. Original legacy production must be
 2/s before conversion. No facility upgrade tiers, shipping, radius pricing, or
 scenario objectives are included in this milestone.
+
+## Automatic connected shipping milestone
+
+Server snapshots now derive `connected` for each lighthouse, effective island
+`fuel_production`, `shipping_links` (`from`/`to` beacon IDs), and
+`objective_complete`. All active overlapping pairs in First Light's connected
+component form shipping links; boundary contact counts. Isolated light still
+reveals terrain but cannot enable restoration. Restored facilities require their
+own connected active beacon; Haven always produces 2/s. No new persisted state or
+save format change is needed. Old saves recompute production under these rules.
+
+The objective requires all facilities restored, all beacons connected and active,
+and production at least equal to upkeep. It is a live condition, not a latched win.
+Ships move along links as presentation only, pause with simulation, and respect
+reduced motion. There are no inventories, travel delays, or fleet commands.

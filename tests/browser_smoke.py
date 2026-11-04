@@ -117,6 +117,8 @@ try:
     js("document.querySelector('.primary').click()")
     time.sleep(.2)
     assert js("return document.querySelectorAll('nav button').length") == 2
+    assert js("return document.querySelector('.fuel-facility').innerText.includes('Isolated · +0 fuel/s')")
+    assert js("return document.querySelector('.economy').innerText.includes('Production: +2/s')")
     before = screenshot('before-pan')
     req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 0, 'x': 500, 'y': 400}, {'type': 'pointerDown', 'button': 0}, {'type': 'pointerMove', 'duration': 200, 'x': 650, 'y': 450}, {'type': 'pointerUp', 'button': 0}]}]})
     assert screenshot('panned') != before
@@ -158,6 +160,45 @@ try:
     js("document.querySelector('.primary').click()")
     time.sleep(.3)
     assert js("return document.body.innerText.includes('Beacon illuminated') && !document.body.innerText.includes('Fuel shortage extinguished every beacon')")
+    # Complete the scenario through gameplay controls from a fresh paused world.
+    fixture['world']['economy'].update(fuel=300, paused=True, blackout=False)
+    for island in fixture['world']['islands'][1:]:
+        island['fuel_facility'] = 'ruined'
+    for i, light in enumerate(fixture['world']['lighthouses']):
+        light.update(active=i == 0, radius=290, explored_radius=290 if i == 0 else 0)
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(fixture))
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.3)
+    print("Starting scenario playthrough", flush=True)
+    for target in range(1, 4):
+        for _ in range(4):
+            js("document.querySelector('.expand').click()")
+            time.sleep(.1)
+        js(f"document.querySelectorAll('nav button')[{target}].click()")
+        js("document.querySelector('.primary').click()")
+        time.sleep(.15)
+        print(f"Restoring island {target + 1}: " + js("return document.querySelector('.economy').innerText"), flush=True)
+        # Earn enough for the third restoration using the actual simulation.
+        js("if(document.querySelector('.fuel-facility button').disabled) document.querySelector('.pause').click()")
+        for _ in range(900):
+            if js("return !document.querySelector('.fuel-facility button').disabled"): break
+            time.sleep(.1)
+        else: raise RuntimeError('Restoration remained unaffordable')
+        js("document.querySelector('.fuel-facility button').click()")
+        time.sleep(.15)
+    assert js("return document.querySelector('.objective h3').innerText === 'Archipelago restored'")
+    assert js("return document.querySelector('.economy').innerText.includes('Production: +11/s')")
+    screenshot('complete-network')
+    # Losing and restoring the anchor updates the objective and production.
+    js("document.querySelectorAll('nav button')[0].click()")
+    time.sleep(.15)
+    js("document.querySelector('.primary').click()")
+    time.sleep(.2)
+    assert js("return document.querySelector('.objective h3').innerText === 'Reconnect the archipelago'")
+    assert js("return document.querySelector('.economy').innerText.includes('Production: +2/s')")
+    js("document.querySelector('.primary').click()")
+    time.sleep(.2)
+    assert js("return document.querySelector('.objective h3').innerText === 'Archipelago restored'")
     logs = req('POST', route + '/log', {'type': 'browser'})
     severe = [entry for entry in logs if entry['level'] == 'SEVERE' and 'favicon.ico' not in entry['message']]
     assert not severe, severe

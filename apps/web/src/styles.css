@@ -63,3 +63,7 @@ button[aria-pressed="true"] { border-color: #ffd34d; }
 .economy { border-bottom: 1px solid #2b3d47; padding-bottom: 20px; margin-bottom: 24px; }
 .economy h3 { color: #ffd34d; margin: 0 0 12px; }
 .economy p { color: #9aadb7; font-size: 12px; line-height: 1.7; }
+
+.objective { border: 1px solid #5c573d; background: #ffd34d08; padding: 14px; margin-bottom: 24px; }
+.objective h3 { color: #ffd34d; font-size: 15px; margin: 0 0 10px; }
+.objective p { color: #b5c3c7; font-size: 12px; line-height: 1.7; }

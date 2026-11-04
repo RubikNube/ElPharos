@@ -1,7 +1,7 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 5;
+pub const VERSION: u8 = 6;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -63,6 +63,7 @@ fn serialize_snapshot<S: serde::Serializer>(
     struct Light<'a> {
         #[serde(flatten)]
         lighthouse: &'a Lighthouse,
+        connected: bool,
         fuel_upkeep: f64,
         next_fuel_upkeep: Option<f64>,
     }
@@ -82,6 +83,8 @@ fn serialize_snapshot<S: serde::Serializer>(
     #[derive(Serialize)]
     struct Snapshot<'a> {
         economy: EconomySnapshot<'a>,
+        objective_complete: bool,
+        shipping_links: Vec<ShippingLink<'a>>,
         revision: u64,
         radius_step: f64,
         radius_max: f64,
@@ -90,7 +93,26 @@ fn serialize_snapshot<S: serde::Serializer>(
         islands: Vec<IslandSnapshot<'a>>,
         lighthouses: Vec<Light<'a>>,
     }
+    #[derive(Serialize)]
+    struct ShippingLink<'a> {
+        from: &'a str,
+        to: &'a str,
+    }
+    let connected = world.connected_beacons();
+    let mut shipping_links = Vec::new();
+    for (i, a) in world.lighthouses.iter().enumerate() {
+        for (j, b) in world.lighthouses.iter().enumerate().skip(i + 1) {
+            if connected[i] && connected[j] && WorldState::overlap(a, b) {
+                shipping_links.push(ShippingLink {
+                    from: &a.id,
+                    to: &b.id,
+                });
+            }
+        }
+    }
     Snapshot {
+        objective_complete: world.objective_complete(),
+        shipping_links,
         economy: EconomySnapshot {
             economy: &world.economy,
             production: world.production(),
@@ -106,13 +128,15 @@ fn serialize_snapshot<S: serde::Serializer>(
             .iter()
             .map(|island| IslandSnapshot {
                 island,
-                fuel_production: island.fuel_facility.production(),
+                fuel_production: world.facility_production(island, &connected),
             })
             .collect(),
         lighthouses: world
             .lighthouses
             .iter()
-            .map(|lighthouse| Light {
+            .enumerate()
+            .map(|(i, lighthouse)| Light {
+                connected: connected[i],
                 lighthouse,
                 fuel_upkeep: lighthouse.upkeep(),
                 next_fuel_upkeep: (lighthouse.radius < world.radius_max).then(|| {
@@ -144,5 +168,36 @@ mod tests {
         assert_eq!(lights[0]["next_fuel_upkeep"], 1.5);
         assert_eq!(lights[1]["fuel_upkeep"], 2.5);
         assert!(lights[1]["next_fuel_upkeep"].is_null());
+    }
+    #[test]
+    fn snapshots_derive_links_production_and_objective_without_persisting_them() {
+        let mut world = WorldState::default();
+        for light in &mut world.lighthouses {
+            light.active = true;
+        }
+        for island in &mut world.islands[1..] {
+            island.fuel_facility = crate::domain::FuelFacility::Restored;
+        }
+        let snapshot = |w: &WorldState| {
+            serde_json::to_value(ServerMessage::WorldSnapshot {
+                protocol_version: VERSION,
+                world: w,
+            })
+            .unwrap()["world"]
+                .clone()
+        };
+        let connected = snapshot(&world);
+        assert_eq!(connected["objective_complete"], true);
+        assert_eq!(connected["shipping_links"].as_array().unwrap().len(), 3);
+        assert_eq!(connected["economy"]["production"], 11);
+        world.lighthouses[1].active = false;
+        let isolated = snapshot(&world);
+        assert_eq!(isolated["objective_complete"], false);
+        assert_eq!(isolated["shipping_links"], serde_json::json!([]));
+        assert_eq!(isolated["economy"]["production"], 2);
+        let persisted = serde_json::to_value(&world).unwrap();
+        assert!(persisted.get("shipping_links").is_none());
+        assert!(persisted.get("objective_complete").is_none());
+        assert!(persisted["lighthouses"][0].get("connected").is_none());
     }
 }
