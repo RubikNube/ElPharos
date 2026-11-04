@@ -10,6 +10,19 @@ struct Save {
 }
 
 pub fn validate(world: &WorldState) -> Result<(), String> {
+    let e = &world.economy;
+    if e.capacity != crate::domain::FUEL_CAPACITY
+        || e.production != crate::domain::FUEL_PRODUCTION
+        || e.beacon_upkeep != crate::domain::BEACON_UPKEEP
+        || !e.fuel.is_finite()
+        || e.fuel < 0.0
+        || e.fuel > f64::from(e.capacity)
+        || (e.fuel * 4.0).fract() != 0.0
+        || e.elapsed_seconds > 9_007_199_254_740_991
+        || (e.blackout && world.lighthouses.iter().any(|l| l.active))
+    {
+        return Err("Invalid economy".into());
+    }
     let positive = |v: f64| v.is_finite() && v > 0.0;
     if world.revision > 9_007_199_254_740_991
         || !positive(world.width)
@@ -75,7 +88,7 @@ pub fn save(path: &Path, world: &WorldState) -> Result<(), String> {
     let temp = path.with_extension("json.tmp");
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let data = serde_json::to_vec_pretty(&Save {
-            save_version: 1,
+            save_version: 3,
             world: world.clone(),
         })?;
         let mut file = fs::File::create(&temp)?;
@@ -98,8 +111,32 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
     if data.len() > 1_048_576 {
         return Err("Save file is too large".into());
     }
-    let save: Save = serde_json::from_slice(&data).map_err(|e| format!("Invalid save: {e}"))?;
-    if save.save_version != 1 {
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&data).map_err(|e| format!("Invalid save: {e}"))?;
+    // Legacy saves have no economy; migration is restricted to version 1.
+    if value["save_version"] == 1 {
+        let world = value
+            .get_mut("world")
+            .and_then(|w| w.as_object_mut())
+            .ok_or("Invalid legacy world")?;
+        if world.contains_key("economy") {
+            return Err("Unexpected legacy economy".into());
+        }
+        world.insert(
+            "economy".into(),
+            serde_json::to_value(crate::domain::Economy::default()).unwrap(),
+        );
+        value["save_version"] = 3.into();
+    }
+    if value["save_version"] == 2 {
+        // Format 2 stored whole fuel units. Preserve its balance and world geometry.
+        if value["world"]["economy"]["fuel"].as_u64().is_none() {
+            return Err("Invalid legacy fuel balance".into());
+        }
+        value["save_version"] = 3.into();
+    }
+    let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
+    if save.save_version != 3 {
         return Err("Unsupported save version".into());
     }
     validate(&save.world)?;
@@ -151,5 +188,63 @@ mod tests {
         let mut bad = world;
         bad.islands[0].position.x = -1.0;
         assert!(validate(&bad).is_err());
+    }
+}
+
+#[cfg(test)]
+mod economy_tests {
+    use super::*;
+    #[test]
+    fn legacy_migration_and_economy_validation() {
+        let path =
+            std::env::temp_dir().join(format!("el-pharos-legacy-{}.json", std::process::id()));
+        let mut world = WorldState::default();
+        world.expand("beacon-1").unwrap();
+        let mut legacy = serde_json::to_value(&world).unwrap();
+        legacy.as_object_mut().unwrap().remove("economy");
+        fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!({"save_version":1,"world":legacy})).unwrap(),
+        )
+        .unwrap();
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.lighthouses[0].radius, 350.0);
+        assert_eq!(loaded.economy.fuel, 300.0);
+        // Format 2 keeps its whole balance, paused state, and upgraded radius.
+        let mut previous = serde_json::to_value(&world).unwrap();
+        previous["economy"]["fuel"] = 42.into();
+        fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!({"save_version":2,"world":previous})).unwrap(),
+        )
+        .unwrap();
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.economy.fuel, 42.0);
+        assert_eq!(loaded.lighthouses[0].upkeep(), 1.25);
+        world.economy.fuel = 42.75;
+        world.economy.paused = true;
+        world.economy.elapsed_seconds = 90;
+        save(&path, &world).unwrap();
+        assert_eq!(
+            serde_json::to_value(load(&path).unwrap()).unwrap(),
+            serde_json::to_value(&world).unwrap()
+        );
+        let written: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written["save_version"], 3);
+        assert!(
+            written["world"]["lighthouses"][0]
+                .get("fuel_upkeep")
+                .is_none()
+        );
+        for fuel in [-0.25, 601., 1.1, f64::NAN, f64::INFINITY] {
+            world.economy.fuel = fuel;
+            assert!(validate(&world).is_err());
+        }
+        world.economy.fuel = 601.0;
+        assert!(validate(&world).is_err());
+        world.economy.fuel = 0.0;
+        world.economy.production = 99;
+        assert!(validate(&world).is_err());
+        fs::remove_file(path).unwrap();
     }
 }

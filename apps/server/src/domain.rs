@@ -17,6 +17,16 @@ pub struct Lighthouse {
     pub explored_radius: f64,
 }
 
+impl Lighthouse {
+    pub fn upkeep_at_radius(radius: f64) -> f64 {
+        f64::from(BEACON_UPKEEP) + 0.25 * ((radius - 290.0).max(0.0) / 60.0).ceil()
+    }
+
+    pub fn upkeep(&self) -> f64 {
+        Self::upkeep_at_radius(self.radius)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Island {
     pub id: String,
@@ -25,8 +35,39 @@ pub struct Island {
     pub radius: f64,
 }
 
+pub const FUEL_CAPACITY: u32 = 600;
+pub const FUEL_PRODUCTION: u32 = 2;
+pub const BEACON_UPKEEP: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Economy {
+    pub fuel: f64,
+    pub capacity: u32,
+    pub production: u32,
+    pub beacon_upkeep: u32,
+    pub elapsed_seconds: u64,
+    pub paused: bool,
+    pub blackout: bool,
+}
+
+impl Default for Economy {
+    fn default() -> Self {
+        Self {
+            fuel: 300.0,
+            capacity: FUEL_CAPACITY,
+            production: FUEL_PRODUCTION,
+            beacon_upkeep: BEACON_UPKEEP,
+            elapsed_seconds: 0,
+            paused: false,
+            blackout: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
+    pub economy: Economy,
     pub revision: u64,
     pub radius_step: f64,
     pub radius_max: f64,
@@ -39,6 +80,7 @@ pub struct WorldState {
 impl Default for WorldState {
     fn default() -> Self {
         let mut world = Self {
+            economy: Economy::default(),
             revision: 0,
             radius_step: 60.0,
             radius_max: 650.0,
@@ -86,6 +128,47 @@ impl Default for WorldState {
 }
 
 impl WorldState {
+    pub fn tick(&mut self) -> bool {
+        if self.economy.paused
+            || self.revision >= 9_007_199_254_740_991
+            || self.economy.elapsed_seconds >= 9_007_199_254_740_991
+        {
+            return false;
+        }
+        let upkeep = self.upkeep();
+        let e = &mut self.economy;
+        e.fuel = (e.fuel + f64::from(e.production)).min(f64::from(e.capacity));
+        if e.fuel < upkeep {
+            e.fuel = 0.0;
+            e.blackout = true;
+            for light in &mut self.lighthouses {
+                light.active = false;
+            }
+        } else {
+            e.fuel -= upkeep;
+        }
+        e.elapsed_seconds += 1;
+        self.revision += 1;
+        true
+    }
+
+    pub fn upkeep(&self) -> f64 {
+        self.lighthouses
+            .iter()
+            .filter(|l| l.active)
+            .map(Lighthouse::upkeep)
+            .sum()
+    }
+
+    pub fn set_paused(&mut self, paused: bool) -> bool {
+        if self.economy.paused == paused {
+            return false;
+        }
+        self.economy.paused = paused;
+        self.revision += 1;
+        true
+    }
+
     pub fn expand(&mut self, id: &str) -> Result<bool, &'static str> {
         let light = self
             .lighthouses
@@ -105,6 +188,14 @@ impl WorldState {
     }
 
     pub fn set_lighthouse_active(&mut self, id: &str, active: bool) -> Result<bool, &'static str> {
+        let light = self
+            .lighthouses
+            .iter()
+            .find(|l| l.id == id)
+            .ok_or("Unknown lighthouse")?;
+        if active && !light.active && self.economy.fuel < self.upkeep() + light.upkeep() {
+            return Err("Not enough fuel for one second of network upkeep");
+        }
         let lighthouse = self
             .lighthouses
             .iter_mut()
@@ -114,6 +205,9 @@ impl WorldState {
             return Ok(false);
         }
         lighthouse.active = active;
+        if active {
+            self.economy.blackout = false;
+        }
         if active {
             lighthouse.explored_radius = lighthouse.explored_radius.max(lighthouse.radius);
         }
@@ -158,5 +252,120 @@ mod tests {
         assert_eq!(world.set_lighthouse_active("beacon-1", false), Ok(false));
         assert_eq!(world.revision, 1);
         assert!(!world.lighthouses[0].active);
+    }
+}
+
+#[cfg(test)]
+mod economy_tests {
+    use super::*;
+    #[test]
+    fn production_capacity_pause_and_exact_payment() {
+        let mut w = WorldState::default();
+        assert!(w.tick());
+        assert_eq!(w.economy.fuel, 301.0);
+        w.economy.fuel = 600.0;
+        w.tick();
+        assert_eq!(w.economy.fuel, 599.0);
+        assert!(w.set_paused(true));
+        let before = serde_json::to_value(&w).unwrap();
+        assert!(!w.tick());
+        assert!(!w.set_paused(true));
+        assert_eq!(before, serde_json::to_value(&w).unwrap());
+        w.set_paused(false);
+        for l in &mut w.lighthouses {
+            l.active = true;
+            l.explored_radius = l.radius;
+        }
+        w.economy.fuel = 2.0;
+        w.tick();
+        assert_eq!(w.economy.fuel, 0.0);
+        assert!(w.lighthouses.iter().all(|l| l.active));
+    }
+    #[test]
+    fn blackout_recovers_without_losing_exploration() {
+        let mut w = WorldState::default();
+        for l in &mut w.lighthouses {
+            l.active = true;
+            l.explored_radius = l.radius;
+        }
+        w.economy.fuel = 1.0;
+        w.tick();
+        assert_eq!(w.economy.fuel, 0.0);
+        assert!(w.economy.blackout);
+        assert!(
+            w.lighthouses
+                .iter()
+                .all(|l| !l.active && l.explored_radius == l.radius)
+        );
+        assert!(w.set_lighthouse_active("beacon-1", true).is_err());
+        w.tick();
+        assert_eq!(w.economy.fuel, 2.0);
+        w.set_lighthouse_active("beacon-1", true).unwrap();
+        w.set_lighthouse_active("beacon-2", true).unwrap();
+        assert!(!w.economy.blackout);
+        assert!(w.set_lighthouse_active("beacon-3", true).is_err());
+    }
+}
+
+#[cfg(test)]
+mod radius_upkeep_tests {
+    use super::*;
+    #[test]
+    fn tiers_and_legacy_radii() {
+        for (radius, upkeep) in [
+            (290., 1.),
+            (350., 1.25),
+            (410., 1.5),
+            (470., 1.75),
+            (530., 2.),
+            (590., 2.25),
+            (650., 2.5),
+            (200., 1.),
+            (291., 1.25),
+            (351., 1.5),
+        ] {
+            assert_eq!(Lighthouse::upkeep_at_radius(radius), upkeep);
+        }
+    }
+    #[test]
+    fn mixed_upkeep_fractional_ticks_and_activation() {
+        let mut w = WorldState::default();
+        w.expand("beacon-1").unwrap();
+        w.expand("beacon-2").unwrap();
+        w.expand("beacon-2").unwrap();
+        assert_eq!(w.upkeep(), 1.25); // Inactive expansion has no running cost.
+        w.economy.fuel = 2.5;
+        assert!(w.set_lighthouse_active("beacon-2", true).is_err());
+        w.economy.fuel = 2.75;
+        w.set_lighthouse_active("beacon-2", true).unwrap();
+        assert_eq!(w.upkeep(), 2.75);
+        w.economy.fuel = 0.75;
+        w.tick();
+        assert_eq!(w.economy.fuel, 0.); // Exact payment keeps the beacons lit.
+        assert!(w.lighthouses[0].active && w.lighthouses[1].active);
+        w.tick();
+        assert!(w.economy.blackout);
+        w.tick();
+        assert_eq!(w.economy.fuel, 2.);
+    }
+    #[test]
+    fn expansion_is_free_even_if_upkeep_is_unaffordable() {
+        let mut w = WorldState::default();
+        w.economy.fuel = 0.;
+        for _ in 0..6 {
+            assert!(w.expand("beacon-1").unwrap());
+        }
+        assert_eq!(w.economy.fuel, 0.);
+        assert_eq!(w.upkeep(), 2.5);
+        assert!(!w.expand("beacon-1").unwrap());
+        w.tick();
+        assert!(w.economy.blackout);
+        let mut w = WorldState::default();
+        w.expand("beacon-1").unwrap();
+        w.tick();
+        assert_eq!(w.economy.fuel, 300.75);
+        w.economy.fuel = 600.;
+        w.tick();
+        assert_eq!(w.economy.fuel, 598.75);
     }
 }

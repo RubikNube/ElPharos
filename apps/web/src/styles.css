@@ -59,3 +59,7 @@ button[aria-pressed="true"] { border-color: #ffd34d; }
 
 .expand { width: 100%; margin-top: 10px; }
 .save-controls { display: flex; gap: 8px; margin-top: 20px; }
+
+.economy { border-bottom: 1px solid #2b3d47; padding-bottom: 20px; margin-bottom: 24px; }
+.economy h3 { color: #ffd34d; margin: 0 0 12px; }
+.economy p { color: #9aadb7; font-size: 12px; line-height: 1.7; }

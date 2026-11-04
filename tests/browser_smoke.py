@@ -45,6 +45,16 @@ try:
     time.sleep(1)
     assert js("return document.querySelectorAll('canvas').length") == 1
     assert js("return document.body.innerText.includes('First Haven') && document.body.innerText.includes('Beacon illuminated')")
+    assert js("return document.querySelector('.economy').innerText.includes('Fuel:')")
+    js("document.querySelector('.pause').click()")
+    time.sleep(.2)
+    assert js("return document.body.innerText.includes('Simulation paused')")
+    frozen = js("return document.querySelector('.economy h3').innerText")
+    time.sleep(1.2)
+    assert js("return document.querySelector('.economy h3').innerText") == frozen
+    js("document.querySelector('.pause').click()")
+    time.sleep(.2)
+    assert js("return document.body.innerText.includes('Simulation running')")
     initial = screenshot('lit')
     js("document.querySelector('.primary').click()")
     time.sleep(.3)
@@ -54,7 +64,16 @@ try:
     js("document.querySelector('.primary').click()")
     time.sleep(.3)
     assert js("return document.querySelectorAll('nav button').length") == 1
-    for _ in range(4):
+    assert js("return document.querySelector('.upgrade-preview').innerText.includes('1.25 fuel/s')")
+    js("document.querySelector('.expand').click()")
+    time.sleep(.2)
+    assert js("return document.body.innerText.includes('Beacon upkeep: 1.25 fuel/s')")
+    assert js("return document.querySelector('.upgrade-preview').innerText.includes('1.5 fuel/s')")
+    for _ in range(30):
+        if js("return !Number.isInteger(Number(document.querySelector('.economy h3').innerText.split(' ')[1]))"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Fractional fuel was not displayed')
+    for _ in range(3):
         js("document.querySelector('.expand').click()")
         time.sleep(.15)
     assert js("return document.querySelectorAll('nav button').length") == 2
@@ -96,6 +115,26 @@ try:
     coords = js("const r=document.querySelector('.map').getBoundingClientRect(); const z=Math.max(.15, Math.min(4, Math.min(r.width/2400,r.height/1000)*.9)); return [r.x+r.width/2+(800-1200)*z,r.y+r.height/2+(480-500)*z]")
     req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerMove','duration':0,'x':round(coords[0]),'y':round(coords[1])},{'type':'pointerDown','button':0},{'type':'pointerUp','button':0}]}]})
     assert js("return document.querySelector('h2').innerText === 'First Light'")
+    # Load a low-fuel fixture through the real save slot to exercise blackout and recovery.
+    fixture = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
+    fixture['world']['economy'].update(fuel=0, paused=False, blackout=False)
+    for light in fixture['world']['lighthouses']:
+        light['active'] = True
+        light['explored_radius'] = light['radius']
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(fixture))
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    for _ in range(50):
+        if js("return document.body.innerText.includes('Fuel shortage extinguished every beacon')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('No blackout feedback')
+    assert js("return document.body.innerText.includes('Beacon extinguished')")
+    for _ in range(50):
+        if js("return !document.querySelector('.primary').disabled"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Fuel did not recover')
+    js("document.querySelector('.primary').click()")
+    time.sleep(.3)
+    assert js("return document.body.innerText.includes('Beacon illuminated') && !document.body.innerText.includes('Fuel shortage extinguished every beacon')")
     logs = req('POST', route + '/log', {'type': 'browser'})
     severe = [entry for entry in logs if entry['level'] == 'SEVERE' and 'favicon.ico' not in entry['message']]
     assert not severe, severe

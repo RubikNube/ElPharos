@@ -38,7 +38,7 @@ export function connectWorld() {
         clearTimeout(deadline);
         attempt = 0;
         const selected = message.world.lighthouses.find(light => light.id === useWorldStore.getState().selectedId && isDiscovered(message.world, light.position));
-        useWorldStore.setState({ selectedId: selected?.id ?? null, world: message.world, connection: 'connected', error: null });
+        useWorldStore.setState({ selectedId: selected?.id ?? null, world: message.world, connection: 'connected' });
       } catch {
         useWorldStore.setState({ error: 'Received an incompatible world. Check that client and server versions match.' });
         current.close(1002, 'Invalid server message');
@@ -61,6 +61,7 @@ export function connectWorld() {
     send(message: ClientMessage) {
       if (socket?.readyState !== WebSocket.OPEN || useWorldStore.getState().connection !== 'connected') return;
       if ('request_id' in message) useWorldStore.setState({ pending: { id: message.request_id, action: message.type }, notice: null, error: null });
+      useWorldStore.setState({ error: null });
       socket.send(JSON.stringify(message));
     },
     dispose() {

@@ -1,4 +1,4 @@
-# El Pharos: archipelago milestone
+# El Pharos: archipelago and fuel milestone
 
 Implemented in runnable increments: four-island world; local selection and
 contextual panel; authoritative radius expansion; remembered fog; durable save/load.
@@ -22,16 +22,19 @@ Selection is client-local. Map clicks use a six-pixel movement threshold; draggi
 does not select. The accessible panel list offers the same selections. Selection
 survives snapshots and reconnects if the entity still exists and is discovered.
 
-## Wire protocol 2
+## Wire protocol 4
 
-Every command includes `protocol_version: 2`.
+Every command includes `protocol_version: 4`.
 
+- `set_simulation_paused`: `paused` (shared, idempotent).
 - `set_lighthouse_active`: `lighthouse_id`, `active`.
 - `expand_lighthouse_radius`: `lighthouse_id`.
 - `save_game` and `load_game`: `request_id`.
 
 Snapshots include `radius_step`, `radius_max`, and each lighthouse's
-`explored_radius`, alongside existing geometry and activation fields.
+`explored_radius`, alongside existing geometry and activation fields. Each lighthouse
+also includes derived `fuel_upkeep` and `next_fuel_upkeep` (null at maximum radius).
+These rates are calculated by Rust when serializing snapshots and are not persisted.
 Save/load return `command_result` with `request_id`, `success`, and `message`.
 Successful commands also return an authoritative snapshot; mutations broadcast.
 Errors preserve the world; capped upgrades and unchanged toggles are no-ops.
@@ -41,7 +44,9 @@ explicitly states that the outcome is unknown.
 ## Persistence
 
 One server slot, default `data/savegame.json`, overridden by
-`EL_PHAROS_SAVE_PATH`. JSON envelope: `save_version: 1` and `world`.
+`EL_PHAROS_SAVE_PATH`. JSON envelope: `save_version: 3` and `world`. Format 1 loads through a legacy
+migration that preserves existing world data and supplies the starting economy.
+Format 2 preserves its whole fuel balance. Both adopt the new radius-based rates.
 Save writes and syncs a temporary file, renames it, then syncs the directory.
 Load validates version, bounded file size, geometry, IDs, references, rules, and
 exploration before replacing the world. Live revision advances on load instead
@@ -60,6 +65,41 @@ concurrent upgrades, save/load errors, and process-restart persistence.
 `python3 tests/browser_smoke.py` exercises the UI with Chromium and an isolated
 save file, including mobile layout and browser-console checks.
 
-The local shared-world prototype has no economy, accounts, construction,
-procedural generation, or simulation loop. The existing bundle-size advisory
+The local shared-world prototype has a basic fuel economy, but no accounts or construction,
+trade, or procedural generation. The existing bundle-size advisory
 remains; production access control and deployment are outside this milestone.
+
+
+## Fuel and simulation
+
+Rust owns a shared stockpile: 300 starting fuel, 600 capacity, automatic production
+of 2/s from First Haven, and base 1/s upkeep per active beacon. These constants are
+included in the snapshot's `economy` object alongside `fuel`, `elapsed_seconds`,
+`paused`, and persistent `blackout` feedback. Each +60 radius upgrade adds 0.25/s,
+from 1/s at radius 290 to 2.5/s at radius 650. The formula is
+`1 + 0.25 * ceil(max(0, radius - 290) / 60)`; intermediate legacy radii round up
+to the next tier and smaller radii retain base upkeep. Inactive beacons consume
+nothing. Fuel uses finite quarter-unit values, which are exactly representable in
+binary; validation rejects negative, over-capacity, and non-quarter balances.
+
+Expansion has no upfront charge or affordability restriction. The new rate applies
+on the next tick, and the sidebar previews it before expansion. Activation checks
+and tick consumption sum each active beacon's individual rate. Upgrade pricing
+remains deferred.
+
+Each deterministic tick adds production up to capacity, then pays all upkeep.
+Insufficient fuel consumes the remainder and extinguishes all beacons without
+altering exploration. Production continues and relighting is manual. Activation
+requires one second of the resulting active network's upkeep in reserve.
+
+One task per application advances once per second, with no missed-tick or offline
+catch-up. A weak state reference and shutdown notification release the task when
+the application is dropped. Session guards track connected players; no clients
+means suspension, independently of explicit shared pause. Resume, reconnect, and
+load reset the next tick to a full second. Repeated pause requests are no-ops.
+Ticks, commands, and save/load share the existing mutex, acquired on the blocking
+pool. Mutations broadcast full snapshots; paused and suspended worlds do not tick.
+
+The sidebar displays reserve/capacity, production, upkeep, net rate, elapsed time,
+and shared pause status. Shortage feedback survives tick snapshots until manual
+relighting; command errors survive ticks until the next player command.

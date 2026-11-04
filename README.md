@@ -40,7 +40,7 @@ Drag the chart to pan; scroll to zoom around the pointer. Use the visible zoom
 and reset controls, or focus the map and press arrow keys, `+`, `-`, and `0`.
 Select a lighthouse by clicking its marker or its button in the side panel.
 Use **Extinguish beacon / Light the beacon** to change its illumination.
-**Expand radius** adds 60 units for free, up to 650 units. Inactive beacons can
+**Expand radius** adds 60 units with no upfront cost, up to 650 units. Inactive beacons can
 be upgraded, but only active illumination reveals new areas.
 
 **Save** writes one shared server slot; **Load** replaces the world in every
@@ -49,6 +49,33 @@ working directory; override it with `EL_PHAROS_SAVE_PATH`. Restart starts a fres
 world; use Load to restore the saved one. Camera and selection are local and are
 not saved. Invalid or missing saves leave the world unchanged. Use only one
 server process per save path.
+
+## Fuel economy
+
+First Haven automatically produces **2 fuel/second** into one shared reserve,
+starting at **300**, with capacity **600**. Active beacons start at **1 fuel/second** at radius 290.
+Each +60 radius upgrade adds **0.25 fuel/second**, reaching **2.5/s** at radius 650.
+Inactive beacons consume nothing; expanding them increases their eventual upkeep.
+The expansion preview shows the resulting rate. Expansion has no upfront cost and
+is allowed even if reserves cannot cover the increased upkeep. Its new rate applies
+on the next tick. Fuel balances are tracked in exact quarter units.
+
+The server advances one second at a time while at least one player is connected.
+**Pause / Resume** affects everyone; beacon commands and save/load still work
+while paused. Disconnecting the last player suspends simulation without changing
+the pause setting. Reconnecting resumes after a full second. There is no offline
+catch-up, and missed timer ticks are skipped.
+
+Each tick adds production up to capacity, then pays upkeep. If the reserve cannot
+pay the whole network, all remaining fuel is consumed and every beacon goes out.
+Exploration is preserved and production continues. Relight beacons manually once
+fuel covers one second of the resulting network's upkeep; they do not restart
+automatically. The side panel shows fuel, rates, pause status, and shortage feedback.
+
+Saves include fuel, elapsed simulation time, and explicit pause state. Older
+format-1 saves migrate on load with the starting economy defaults; format-2 saves
+preserve their fuel balances. Both adopt radius-based upkeep. New saves use
+format 3. Wire protocol 4 requires matching client and server versions.
 
 ## Structure and responsibilities
 
@@ -126,7 +153,7 @@ bind address; `RUST_LOG` configures tracing. If changing the backend port during
 development, also update the Vite proxy targets.
 
 This is a local prototype with one shared world and an explicit durable save slot. There are no accounts,
-resource systems, weather, combat, story, or research. The handover's resource simulation remains deferred. For deployment, serve the built client
+construction, trade, weather, combat, story, or research. Fuel is the first resource system; further economy features remain deferred. For deployment, serve the built client
 and proxy `/ws` to Axum under the same origin, with TLS and appropriate access
 control. Vite's development proxy is not part of the production build.
 
@@ -148,5 +175,5 @@ python3 tests/browser_smoke.py
 
 This starts local services on ports 3001, 5173, and 9515, uses an isolated
 temporary save slot, and checks discovery, selection, expansion, save/load,
-camera interaction, StrictMode cleanup, and mobile overflow. These ports must
+camera interaction, fuel display, shared pause, blackout recovery, StrictMode cleanup, and mobile overflow. These ports must
 be free. Screenshots and process logs are written under `/tmp/el-pharos-*`.

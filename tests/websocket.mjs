@@ -41,18 +41,20 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
     return {
       socket,
       async next() {
-        for (let i = 0; i < 100; i++) { if (queue.length) return queue.shift(); await delay(20); }
+        for (let i = 0; i < 200; i++) { if (queue.length) return queue.shift(); await delay(20); }
         throw new Error('Timed out waiting for server message');
       },
-      command(id, active, version = 2) {
+      command(id, active, version = 4) {
         socket.send(JSON.stringify({ type: 'set_lighthouse_active', protocol_version: version, lighthouse_id: id, active }));
       },
     };
   }
   const a = client(), b = client();
+  await a.next(); await b.next();
+  a.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 4, paused: true }));
   const initial = await a.next();
   assert.equal(initial.type, 'world_snapshot');
-  assert.equal(initial.protocol_version, 2);
+  assert.equal(initial.protocol_version, 4);
   assert.equal(initial.world.islands.length, 4);
   assert.equal(initial.world.lighthouses.length, 4);
   assert.deepEqual(await b.next(), initial);
@@ -77,21 +79,26 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal((await a.next()).world.lighthouses[0].active, true);
   assert.equal((await b.next()).world.revision, changed.world.revision + 1);
   async function command(type, request_id) {
-    a.socket.send(JSON.stringify({ type, protocol_version: 2, request_id }));
+    a.socket.send(JSON.stringify({ type, protocol_version: 4, request_id }));
     let result;
     do { result = await a.next(); } while (result.type !== 'command_result');
     assert.equal(result.request_id, request_id);
     return result;
   }
   assert.equal((await command('load_game', 'missing')).success, false);
-  a.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 2, lighthouse_id: id }));
+  a.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 4, lighthouse_id: id }));
   const expanded = await a.next();
   assert.equal(expanded.world.lighthouses[0].radius, 350);
+  assert.equal(expanded.world.lighthouses[0].fuel_upkeep, 1.25);
+  assert.equal(expanded.world.lighthouses[0].next_fuel_upkeep, 1.5);
+  assert.equal(expanded.world.economy.fuel, initial.world.economy.fuel);
   assert.equal(expanded.world.lighthouses[0].explored_radius, 350);
   assert.deepEqual(await b.next(), expanded);
   assert.equal((await command('save_game', 'save')).success, true);
   assert.deepEqual(await a.next(), expanded);
   const saved = await readFile(savePath, 'utf8');
+  assert.equal(JSON.parse(saved).save_version, 3);
+  assert.equal(JSON.parse(saved).world.lighthouses[0].fuel_upkeep, undefined);
   a.command(id, false);
   const dark = await a.next();
   assert.equal(dark.world.lighthouses[0].explored_radius, 350);
@@ -113,7 +120,7 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal((await command('load_game', 'version')).success, false);
   await writeFile(savePath, saved);
   // Concurrent clients mutate under the same server gate without losing an upgrade.
-  for (const c of [a, b]) c.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 2, lighthouse_id: id }));
+  for (const c of [a, b]) c.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 4, lighthouse_id: id }));
   async function untilRadius(c, radius) {
     for (;;) {
       const message = await c.next();
@@ -139,8 +146,31 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.ok(port, logs);
   const restarted = client();
   assert.equal((await restarted.next()).world.lighthouses[0].radius, 290);
-  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 2, request_id: 'restart' }));
+  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 4, request_id: 'restart' }));
   assert.equal((await restarted.next()).success, true);
   assert.equal((await restarted.next()).world.lighthouses[0].radius, 350);
 
+  // Exercise unsolicited ticks and shared pause using predicates, not message order.
+  async function until(c, predicate) {
+    for (let i = 0; i < 30; i++) {
+      const message = await c.next();
+      if (message.type === 'world_snapshot' && predicate(message.world)) return message.world;
+    }
+    throw new Error('No matching snapshot');
+  }
+  const observer = client();
+  const baseline = (await observer.next()).world.economy.elapsed_seconds;
+  restarted.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 4, paused: false }));
+  await until(restarted, w => !w.economy.paused);
+  const tick = await until(restarted, w => w.economy.elapsed_seconds > baseline);
+  const otherTick = await until(observer, w => w.economy.elapsed_seconds === tick.economy.elapsed_seconds);
+  assert.deepEqual(otherTick, tick);
+  assert.equal(tick.lighthouses[0].fuel_upkeep, 1.25);
+  const savedFuel = JSON.parse(saved).world.economy.fuel;
+  assert.equal(tick.economy.fuel, savedFuel + (tick.economy.elapsed_seconds - baseline) * 0.75);
+  observer.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 4, paused: true }));
+  const paused = await until(restarted, w => w.economy.paused);
+  await delay(1200);
+  const verification = client();
+  assert.deepEqual((await verification.next()).world, paused);
 });
