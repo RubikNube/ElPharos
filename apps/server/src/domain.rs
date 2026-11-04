@@ -29,14 +29,34 @@ impl Lighthouse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Island {
+    pub fuel_facility: FuelFacility,
     pub id: String,
     pub name: String,
     pub position: Point,
     pub radius: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FuelFacility {
+    Haven,
+    Ruined,
+    Restored,
+}
+
+impl FuelFacility {
+    pub fn production(self) -> u32 {
+        match self {
+            Self::Haven => 2,
+            Self::Ruined => 0,
+            Self::Restored => 3,
+        }
+    }
+}
+
+pub const FACILITY_RESTORE_COST: u32 = 120;
+
 pub const FUEL_CAPACITY: u32 = 600;
-pub const FUEL_PRODUCTION: u32 = 2;
 pub const BEACON_UPKEEP: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +64,6 @@ pub const BEACON_UPKEEP: u32 = 1;
 pub struct Economy {
     pub fuel: f64,
     pub capacity: u32,
-    pub production: u32,
     pub beacon_upkeep: u32,
     pub elapsed_seconds: u64,
     pub paused: bool,
@@ -56,7 +75,6 @@ impl Default for Economy {
         Self {
             fuel: 300.0,
             capacity: FUEL_CAPACITY,
-            production: FUEL_PRODUCTION,
             beacon_upkeep: BEACON_UPKEEP,
             elapsed_seconds: 0,
             paused: false,
@@ -87,6 +105,7 @@ impl Default for WorldState {
             width: 2400.0,
             height: 1000.0,
             islands: vec![Island {
+                fuel_facility: FuelFacility::Haven,
                 id: "island-1".into(),
                 name: "First Haven".into(),
                 position: Point { x: 800.0, y: 500.0 },
@@ -108,6 +127,7 @@ impl Default for WorldState {
             (4, 2150.0, 650.0, "Last Anchorage"),
         ] {
             world.islands.push(Island {
+                fuel_facility: FuelFacility::Ruined,
                 id: format!("island-{n}"),
                 name: name.into(),
                 position: Point { x, y },
@@ -128,6 +148,42 @@ impl Default for WorldState {
 }
 
 impl WorldState {
+    pub fn production(&self) -> u32 {
+        self.islands
+            .iter()
+            .map(|island| island.fuel_facility.production())
+            .sum()
+    }
+
+    pub fn is_illuminated(&self, position: &Point) -> bool {
+        self.lighthouses.iter().any(|light| {
+            light.active
+                && (position.x - light.position.x).hypot(position.y - light.position.y)
+                    <= light.radius
+        })
+    }
+
+    pub fn restore_fuel_facility(&mut self, id: &str) -> Result<bool, &'static str> {
+        let index = self
+            .islands
+            .iter()
+            .position(|island| island.id == id)
+            .ok_or("Unknown island")?;
+        if self.islands[index].fuel_facility != FuelFacility::Ruined {
+            return Ok(false);
+        }
+        if !self.is_illuminated(&self.islands[index].position) {
+            return Err("Island must be illuminated to restore its fuel facility");
+        }
+        if self.economy.fuel < f64::from(FACILITY_RESTORE_COST) {
+            return Err("Not enough fuel to restore facility");
+        }
+        self.economy.fuel -= f64::from(FACILITY_RESTORE_COST);
+        self.islands[index].fuel_facility = FuelFacility::Restored;
+        self.revision += 1;
+        Ok(true)
+    }
+
     pub fn tick(&mut self) -> bool {
         if self.economy.paused
             || self.revision >= 9_007_199_254_740_991
@@ -135,9 +191,10 @@ impl WorldState {
         {
             return false;
         }
+        let production = self.production();
         let upkeep = self.upkeep();
         let e = &mut self.economy;
-        e.fuel = (e.fuel + f64::from(e.production)).min(f64::from(e.capacity));
+        e.fuel = (e.fuel + f64::from(production)).min(f64::from(e.capacity));
         if e.fuel < upkeep {
             e.fuel = 0.0;
             e.blackout = true;
@@ -367,5 +424,71 @@ mod radius_upkeep_tests {
         w.economy.fuel = 600.;
         w.tick();
         assert_eq!(w.economy.fuel, 598.75);
+    }
+}
+
+#[cfg(test)]
+mod facility_tests {
+    use super::*;
+
+    #[test]
+    fn restoration_checks_light_and_funds_and_is_idempotent() {
+        let mut w = WorldState::default();
+        assert_eq!(w.production(), 2);
+        assert_eq!(w.restore_fuel_facility("missing"), Err("Unknown island"));
+        assert!(w.restore_fuel_facility("island-2").is_err());
+        // Island center exactly on the edge of First Light's illumination.
+        w.islands[1].position = Point { x: 1090., y: 480. };
+        w.economy.fuel = 119.75;
+        let before = serde_json::to_value(&w).unwrap();
+        assert!(w.restore_fuel_facility("island-2").is_err());
+        assert_eq!(serde_json::to_value(&w).unwrap(), before);
+        w.economy.fuel = 120.;
+        w.set_paused(true);
+        let revision = w.revision;
+        assert_eq!(w.restore_fuel_facility("island-2"), Ok(true));
+        assert_eq!(w.economy.fuel, 0.);
+        assert_eq!(w.production(), 5);
+        assert_eq!(w.revision, revision + 1);
+        w.set_lighthouse_active("beacon-1", false).unwrap();
+        let revision = w.revision;
+        assert_eq!(w.restore_fuel_facility("island-2"), Ok(false));
+        assert_eq!(w.restore_fuel_facility("island-1"), Ok(false));
+        assert_eq!(w.revision, revision);
+        assert!(!w.tick());
+        w.set_paused(false);
+        w.tick();
+        assert_eq!(w.economy.fuel, 5.);
+    }
+
+    #[test]
+    fn remembered_light_does_not_allow_restoration_and_blackout_keeps_production() {
+        let mut w = WorldState::default();
+        w.islands[1].position = Point { x: 800., y: 500. };
+        w.set_lighthouse_active("beacon-1", false).unwrap();
+        assert!(w.restore_fuel_facility("island-2").is_err());
+        w.set_lighthouse_active("beacon-1", true).unwrap();
+        w.restore_fuel_facility("island-2").unwrap();
+        for light in &mut w.lighthouses {
+            light.active = true;
+            light.radius = 650.;
+            light.explored_radius = 650.;
+        }
+        w.economy.fuel = 0.;
+        w.tick();
+        assert!(w.economy.blackout);
+        w.tick();
+        assert_eq!(w.economy.fuel, 5.);
+        for island in &mut w.islands[2..] {
+            island.fuel_facility = FuelFacility::Restored;
+        }
+        assert_eq!(w.production(), 11);
+        w.economy.fuel = 600.;
+        for light in &mut w.lighthouses {
+            light.active = true;
+        }
+        w.tick();
+        assert_eq!(w.economy.fuel, 590.);
+        assert_eq!(w.upkeep(), 10.);
     }
 }

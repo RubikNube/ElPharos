@@ -12,7 +12,6 @@ struct Save {
 pub fn validate(world: &WorldState) -> Result<(), String> {
     let e = &world.economy;
     if e.capacity != crate::domain::FUEL_CAPACITY
-        || e.production != crate::domain::FUEL_PRODUCTION
         || e.beacon_upkeep != crate::domain::BEACON_UPKEEP
         || !e.fuel.is_finite()
         || e.fuel < 0.0
@@ -46,6 +45,15 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
             && p.y >= 0.0
             && p.y <= world.height
     };
+    if world
+        .islands
+        .iter()
+        .filter(|island| island.fuel_facility == crate::domain::FuelFacility::Haven)
+        .count()
+        != 1
+    {
+        return Err("Expected exactly one Haven fuel facility".into());
+    }
     let mut ids = HashSet::new();
     for island in &world.islands {
         if island.id.is_empty()
@@ -88,7 +96,7 @@ pub fn save(path: &Path, world: &WorldState) -> Result<(), String> {
     let temp = path.with_extension("json.tmp");
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let data = serde_json::to_vec_pretty(&Save {
-            save_version: 3,
+            save_version: 4,
             world: world.clone(),
         })?;
         let mut file = fs::File::create(&temp)?;
@@ -113,6 +121,12 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
     }
     let mut value: serde_json::Value =
         serde_json::from_slice(&data).map_err(|e| format!("Invalid save: {e}"))?;
+    let legacy_version = value["save_version"]
+        .as_u64()
+        .ok_or("Invalid save version")?;
+    if !(1..=4).contains(&legacy_version) {
+        return Err("Unsupported save version".into());
+    }
     // Legacy saves have no economy; migration is restricted to version 1.
     if value["save_version"] == 1 {
         let world = value
@@ -126,6 +140,7 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
             "economy".into(),
             serde_json::to_value(crate::domain::Economy::default()).unwrap(),
         );
+        value["world"]["economy"]["production"] = 2.into();
         value["save_version"] = 3.into();
     }
     if value["save_version"] == 2 {
@@ -135,8 +150,34 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
         }
         value["save_version"] = 3.into();
     }
+    if value["save_version"] == 3 {
+        let economy = value
+            .get_mut("world")
+            .and_then(|world| world.get_mut("economy"))
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or("Invalid legacy economy")?;
+        if economy.remove("production") != Some(serde_json::json!(2)) {
+            return Err("Invalid legacy production".into());
+        }
+        let islands = value
+            .get_mut("world")
+            .and_then(|world| world.get_mut("islands"))
+            .and_then(serde_json::Value::as_array_mut)
+            .ok_or("Invalid legacy islands")?;
+        for (index, island) in islands.iter_mut().enumerate() {
+            let island = island.as_object_mut().ok_or("Invalid legacy island")?;
+            if island.contains_key("fuel_facility") {
+                return Err("Unexpected legacy facility".into());
+            }
+            island.insert(
+                "fuel_facility".into(),
+                if index == 0 { "haven" } else { "ruined" }.into(),
+            );
+        }
+        value["save_version"] = 4.into();
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
-    if save.save_version != 3 {
+    if save.save_version != 4 {
         return Err("Unsupported save version".into());
     }
     validate(&save.world)?;
@@ -202,6 +243,9 @@ mod economy_tests {
         world.expand("beacon-1").unwrap();
         let mut legacy = serde_json::to_value(&world).unwrap();
         legacy.as_object_mut().unwrap().remove("economy");
+        for island in legacy["islands"].as_array_mut().unwrap() {
+            island.as_object_mut().unwrap().remove("fuel_facility");
+        }
         fs::write(
             &path,
             serde_json::to_vec(&serde_json::json!({"save_version":1,"world":legacy})).unwrap(),
@@ -213,6 +257,10 @@ mod economy_tests {
         // Format 2 keeps its whole balance, paused state, and upgraded radius.
         let mut previous = serde_json::to_value(&world).unwrap();
         previous["economy"]["fuel"] = 42.into();
+        previous["economy"]["production"] = 2.into();
+        for island in previous["islands"].as_array_mut().unwrap() {
+            island.as_object_mut().unwrap().remove("fuel_facility");
+        }
         fs::write(
             &path,
             serde_json::to_vec(&serde_json::json!({"save_version":2,"world":previous})).unwrap(),
@@ -230,7 +278,7 @@ mod economy_tests {
             serde_json::to_value(&world).unwrap()
         );
         let written: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(written["save_version"], 3);
+        assert_eq!(written["save_version"], 4);
         assert!(
             written["world"]["lighthouses"][0]
                 .get("fuel_upkeep")
@@ -243,8 +291,66 @@ mod economy_tests {
         world.economy.fuel = 601.0;
         assert!(validate(&world).is_err());
         world.economy.fuel = 0.0;
-        world.economy.production = 99;
+        world.islands[0].fuel_facility = crate::domain::FuelFacility::Ruined;
         assert!(validate(&world).is_err());
+        fs::remove_file(path).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod facility_tests {
+    use super::*;
+    use crate::domain::FuelFacility;
+
+    #[test]
+    fn facilities_roundtrip_legacy_three_and_invalid_states() {
+        let path =
+            std::env::temp_dir().join(format!("el-pharos-facilities-{}.json", std::process::id()));
+        let mut world = WorldState::default();
+        world.set_lighthouse_active("beacon-2", true).unwrap();
+        world.restore_fuel_facility("island-2").unwrap();
+        world.set_lighthouse_active("beacon-2", false).unwrap();
+        save(&path, &world).unwrap();
+        let saved: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(saved["world"]["economy"].get("production").is_none());
+        assert_eq!(load(&path).unwrap().production(), 5);
+        for state in ["missing", "haven"] {
+            let mut invalid = saved.clone();
+            invalid["world"]["islands"][1]["fuel_facility"] = state.into();
+            fs::write(&path, serde_json::to_vec(&invalid).unwrap()).unwrap();
+            assert!(load(&path).is_err());
+        }
+        let mut missing = saved.clone();
+        missing["world"]["islands"][0]["fuel_facility"] = "ruined".into();
+        fs::write(&path, serde_json::to_vec(&missing).unwrap()).unwrap();
+        assert!(load(&path).is_err());
+        for world in [
+            serde_json::json!(7),
+            serde_json::json!([]),
+            serde_json::json!({"economy": 7}),
+        ] {
+            fs::write(
+                &path,
+                serde_json::to_vec(&serde_json::json!({"save_version": 3, "world": world}))
+                    .unwrap(),
+            )
+            .unwrap();
+            assert!(load(&path).is_err());
+        }
+        let mut legacy = saved;
+        legacy["save_version"] = 3.into();
+        legacy["world"]["economy"]["production"] = 2.into();
+        for island in legacy["world"]["islands"].as_array_mut().unwrap() {
+            island.as_object_mut().unwrap().remove("fuel_facility");
+        }
+        fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let migrated = load(&path).unwrap();
+        assert_eq!(migrated.production(), 2);
+        assert_eq!(migrated.economy.fuel, world.economy.fuel);
+        assert_eq!(migrated.islands[1].fuel_facility, FuelFacility::Ruined);
+        legacy["world"]["economy"]["production"] = 5.into();
+        fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        assert!(load(&path).is_err());
         fs::remove_file(path).unwrap();
     }
 }

@@ -52,13 +52,23 @@ server process per save path.
 
 ## Fuel economy
 
-First Haven automatically produces **2 fuel/second** into one shared reserve,
+First Haven starts with an operational fuel facility producing **2 fuel/second** into one shared reserve,
 starting at **300**, with capacity **600**. Active beacons start at **1 fuel/second** at radius 290.
 Each +60 radius upgrade adds **0.25 fuel/second**, reaching **2.5/s** at radius 650.
 Inactive beacons consume nothing; expanding them increases their eventual upkeep.
 The expansion preview shows the resulting rate. Expansion has no upfront cost and
 is allowed even if reserves cannot cover the increased upkeep. Its new rate applies
 on the next tick. Fuel balances are tracked in exact quarter units.
+
+Each other island has one ruined fuel facility. Select its lighthouse to see the
+facility controls. **Restore fuel facility** costs **120 fuel** and immediately adds
+**3 fuel/second** to shared production. The island center must currently be inside
+an active beacon's radius; remembered exploration alone is insufficient. Restored
+facilities keep producing in darkness and during blackouts. Restoration is allowed
+while paused, with production taking effect on the next tick. Repeated restoration
+requests never charge twice. There are no further facility levels or refunds.
+Restoring all three facilities gives **11 fuel/second**, enough for four maximum-radius
+beacons at **10 fuel/second**. Fuel capacity remains 600.
 
 The server advances one second at a time while at least one player is connected.
 **Pause / Resume** affects everyone; beacon commands and save/load still work
@@ -74,8 +84,8 @@ automatically. The side panel shows fuel, rates, pause status, and shortage feed
 
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
-preserve their fuel balances. Both adopt radius-based upkeep. New saves use
-format 3. Wire protocol 4 requires matching client and server versions.
+preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
+New saves use format 4 and persist facilities rather than derived production. Wire protocol 5 requires matching client and server versions.
 
 ## Structure and responsibilities
 
@@ -153,7 +163,7 @@ bind address; `RUST_LOG` configures tracing. If changing the backend port during
 development, also update the Vite proxy targets.
 
 This is a local prototype with one shared world and an explicit durable save slot. There are no accounts,
-construction, trade, weather, combat, story, or research. Fuel is the first resource system; further economy features remain deferred. For deployment, serve the built client
+general construction, trade, weather, combat, story, or research. Fuel is the first resource system; further economy features remain deferred. For deployment, serve the built client
 and proxy `/ws` to Axum under the same origin, with TLS and appropriate access
 control. Vite's development proxy is not part of the production build.
 
@@ -173,7 +183,6 @@ With Python 3, Chromium at `/usr/bin/chromium`, and `chromedriver` installed:
 python3 tests/browser_smoke.py
 ```
 
-This starts local services on ports 3001, 5173, and 9515, uses an isolated
+This starts local services on isolated temporary ports, uses an isolated
 temporary save slot, and checks discovery, selection, expansion, save/load,
-camera interaction, fuel display, shared pause, blackout recovery, StrictMode cleanup, and mobile overflow. These ports must
-be free. Screenshots and process logs are written under `/tmp/el-pharos-*`.
+camera interaction, fuel display, shared pause, blackout recovery, StrictMode cleanup, and mobile overflow. Screenshots and process logs are written under `/tmp/el-pharos-*`.

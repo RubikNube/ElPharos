@@ -1,11 +1,15 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 4;
+pub const VERSION: u8 = 5;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    RestoreFuelFacility {
+        protocol_version: u8,
+        island_id: String,
+    },
     SetSimulationPaused {
         protocol_version: u8,
         paused: bool,
@@ -54,7 +58,7 @@ fn serialize_snapshot<S: serde::Serializer>(
     world: &WorldState,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    use crate::domain::{Economy, Island, Lighthouse};
+    use crate::domain::{Economy, FACILITY_RESTORE_COST, Island, Lighthouse};
     #[derive(Serialize)]
     struct Light<'a> {
         #[serde(flatten)]
@@ -63,24 +67,48 @@ fn serialize_snapshot<S: serde::Serializer>(
         next_fuel_upkeep: Option<f64>,
     }
     #[derive(Serialize)]
-    struct Snapshot<'a> {
+    struct IslandSnapshot<'a> {
+        #[serde(flatten)]
+        island: &'a Island,
+        fuel_production: u32,
+    }
+    #[derive(Serialize)]
+    struct EconomySnapshot<'a> {
+        #[serde(flatten)]
         economy: &'a Economy,
+        production: u32,
+        facility_restore_cost: u32,
+    }
+    #[derive(Serialize)]
+    struct Snapshot<'a> {
+        economy: EconomySnapshot<'a>,
         revision: u64,
         radius_step: f64,
         radius_max: f64,
         width: f64,
         height: f64,
-        islands: &'a [Island],
+        islands: Vec<IslandSnapshot<'a>>,
         lighthouses: Vec<Light<'a>>,
     }
     Snapshot {
-        economy: &world.economy,
+        economy: EconomySnapshot {
+            economy: &world.economy,
+            production: world.production(),
+            facility_restore_cost: FACILITY_RESTORE_COST,
+        },
         revision: world.revision,
         radius_step: world.radius_step,
         radius_max: world.radius_max,
         width: world.width,
         height: world.height,
-        islands: &world.islands,
+        islands: world
+            .islands
+            .iter()
+            .map(|island| IslandSnapshot {
+                island,
+                fuel_production: island.fuel_facility.production(),
+            })
+            .collect(),
         lighthouses: world
             .lighthouses
             .iter()

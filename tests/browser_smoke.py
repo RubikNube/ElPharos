@@ -1,14 +1,29 @@
 import base64, json, os, subprocess, time, urllib.request, urllib.error
 from pathlib import Path
-import tempfile
+import tempfile, socket
 root = str(Path(__file__).resolve().parents[1])
 save_dir = tempfile.TemporaryDirectory(prefix='el-pharos-browser-')
 os.environ['EL_PHAROS_SAVE_PATH'] = save_dir.name + '/save.json'
 processes = []
 
+def free_port():
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        return sock.getsockname()[1]
+
+server_port, web_port, driver_port = free_port(), free_port(), free_port()
+os.environ['EL_PHAROS_BIND'] = f'127.0.0.1:{server_port}'
+config_path = Path(save_dir.name) / 'vite.config.mjs'
+config_path.write_text(
+    'import base from ' + json.dumps(root + '/apps/web/vite.config.ts') + ';\n'
+    + 'export default {...base, server: {...base.server, proxy: {'
+    + "'/ws': {target: 'ws://127.0.0.1:" + str(server_port) + "', ws: true},"
+    + "'/health': {target: 'http://127.0.0.1:" + str(server_port) + "'}}}};\n"
+)
+
 def req(method, path, data=None):
     body = None if data is None else json.dumps(data).encode()
-    request = urllib.request.Request('http://127.0.0.1:9515' + path, body, {'Content-Type': 'application/json'}, method=method)
+    request = urllib.request.Request(f'http://127.0.0.1:{driver_port}' + path, body, {'Content-Type': 'application/json'}, method=method)
     with urllib.request.urlopen(request, timeout=30) as response:
         result = json.load(response)
     value = result.get('value')
@@ -24,12 +39,12 @@ def wait_url(url):
     raise RuntimeError('Not ready: ' + url)
 
 try:
-    for name, command in [('server', ['cargo', 'run', '--quiet', '-p', 'el-pharos-server']), ('web', ['npm', 'run', 'dev']), ('driver', ['chromedriver', '--port=9515'])]:
+    for name, command in [('server', ['cargo', 'run', '--quiet', '-p', 'el-pharos-server']), ('web', ['npm', 'exec', '--workspace', '@el-pharos/web', '--', 'vite', '--host', '127.0.0.1', '--config', str(config_path), '--port', str(web_port)]), ('driver', ['chromedriver', f'--port={driver_port}'])]:
         log = open('/tmp/el-pharos-' + name + '.log', 'w')
         processes.append(subprocess.Popen(command, cwd=root, stdout=log, stderr=log, start_new_session=True))
-    wait_url('http://127.0.0.1:3001/health')
-    wait_url('http://127.0.0.1:5173')
-    wait_url('http://127.0.0.1:9515/status')
+    wait_url(f'http://127.0.0.1:{server_port}/health')
+    wait_url(f'http://127.0.0.1:{web_port}')
+    wait_url(f'http://127.0.0.1:{driver_port}/status')
     session = req('POST', '/session', {'capabilities': {'alwaysMatch': {'browserName': 'chrome', 'goog:chromeOptions': {'binary': '/usr/bin/chromium', 'args': ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--window-size=1440,1000']}, 'goog:loggingPrefs': {'browser': 'ALL'}}}})['sessionId']
     route = '/session/' + session
     def js(script): return req('POST', route + '/execute/sync', {'script': script, 'args': []})
@@ -37,7 +52,7 @@ try:
         data = req('GET', route + '/screenshot')
         Path('/tmp/el-pharos-' + name + '.png').write_bytes(base64.b64decode(data))
         return data
-    req('POST', route + '/url', {'url': 'http://127.0.0.1:5173'})
+    req('POST', route + '/url', {'url': f'http://127.0.0.1:{web_port}'})
     for _ in range(100):
         if js("return document.body.innerText.includes('World connected') && !!document.querySelector('canvas')"): break
         time.sleep(.1)
@@ -82,6 +97,12 @@ try:
     js("document.querySelector('.primary').click()")
     time.sleep(.2)
     assert js("return document.body.innerText.includes('Beacon illuminated')")
+    assert js("return document.querySelector('.fuel-facility').innerText.includes('Ruined')")
+    assert js("return !document.querySelector('.fuel-facility button').disabled")
+    js("document.querySelector('.fuel-facility button').click()")
+    time.sleep(.2)
+    assert js("return document.querySelector('.fuel-facility').innerText.includes('Operational · +3 fuel/s')")
+    assert js("return document.querySelector('.economy').innerText.includes('Production: +5/s')")
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.3)
     assert js("return document.body.innerText.includes('World saved.')")
@@ -91,6 +112,7 @@ try:
     js("document.querySelectorAll('.save-controls button')[1].click()")
     time.sleep(.3)
     assert js("return document.body.innerText.includes('World loaded.') && document.querySelector('dl').innerText.includes('290 units')")
+    assert js("return document.querySelector('.fuel-facility').innerText.includes('Operational · +3 fuel/s')")
     # Extinguishing preserves discovered entries.
     js("document.querySelector('.primary').click()")
     time.sleep(.2)
@@ -118,6 +140,7 @@ try:
     # Load a low-fuel fixture through the real save slot to exercise blackout and recovery.
     fixture = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
     fixture['world']['economy'].update(fuel=0, paused=False, blackout=False)
+    fixture['world']['islands'][1]['fuel_facility'] = 'ruined'
     for light in fixture['world']['lighthouses']:
         light['active'] = True
         light['explored_radius'] = light['radius']

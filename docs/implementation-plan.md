@@ -22,10 +22,11 @@ Selection is client-local. Map clicks use a six-pixel movement threshold; draggi
 does not select. The accessible panel list offers the same selections. Selection
 survives snapshots and reconnects if the entity still exists and is discovered.
 
-## Wire protocol 4
+## Wire protocol 5
 
-Every command includes `protocol_version: 4`.
+Every command includes `protocol_version: 5`.
 
+- `restore_fuel_facility`: `island_id` (atomic 120-fuel restoration; already operational is a no-op).
 - `set_simulation_paused`: `paused` (shared, idempotent).
 - `set_lighthouse_active`: `lighthouse_id`, `active`.
 - `expand_lighthouse_radius`: `lighthouse_id`.
@@ -44,7 +45,7 @@ explicitly states that the outcome is unknown.
 ## Persistence
 
 One server slot, default `data/savegame.json`, overridden by
-`EL_PHAROS_SAVE_PATH`. JSON envelope: `save_version: 3` and `world`. Format 1 loads through a legacy
+`EL_PHAROS_SAVE_PATH`. JSON envelope: `save_version: 4` and `world`. Format 1 loads through a legacy
 migration that preserves existing world data and supplies the starting economy.
 Format 2 preserves its whole fuel balance. Both adopt the new radius-based rates.
 Save writes and syncs a temporary file, renames it, then syncs the directory.
@@ -65,15 +66,15 @@ concurrent upgrades, save/load errors, and process-restart persistence.
 `python3 tests/browser_smoke.py` exercises the UI with Chromium and an isolated
 save file, including mobile layout and browser-console checks.
 
-The local shared-world prototype has a basic fuel economy, but no accounts or construction,
+The local shared-world prototype has a basic fuel economy, but no accounts or general construction,
 trade, or procedural generation. The existing bundle-size advisory
 remains; production access control and deployment are outside this milestone.
 
 
 ## Fuel and simulation
 
-Rust owns a shared stockpile: 300 starting fuel, 600 capacity, automatic production
-of 2/s from First Haven, and base 1/s upkeep per active beacon. These constants are
+Rust owns a shared stockpile: 300 starting fuel, 600 capacity, facility production
+starting at 2/s from First Haven, and base 1/s upkeep per active beacon. These constants are
 included in the snapshot's `economy` object alongside `fuel`, `elapsed_seconds`,
 `paused`, and persistent `blackout` feedback. Each +60 radius upgrade adds 0.25/s,
 from 1/s at radius 290 to 2.5/s at radius 650. The formula is
@@ -103,3 +104,25 @@ pool. Mutations broadcast full snapshots; paused and suspended worlds do not tic
 The sidebar displays reserve/capacity, production, upkeep, net rate, elapsed time,
 and shared pause status. Shortage feedback survives tick snapshots until manual
 relighting; command errors survive ticks until the next player command.
+
+
+## Island fuel facilities
+
+Each island persists a `fuel_facility` state: `haven` (2/s), `ruined` (0/s), or
+`restored` (3/s). Exactly one Haven facility is required. Total production is
+computed by Rust from facilities; it is never independently persisted. Snapshots
+retain `economy.production`, add `economy.facility_restore_cost` (120), and include
+each island's state and derived `fuel_production`.
+
+Restoration deducts 120 fuel once under the simulation mutex. The island center
+must be within the inclusive radius of any active beacon. Exploration alone does
+not qualify. Unknown IDs, insufficient reserves, and darkness leave state unchanged;
+already operational facilities succeed without a charge or revision. Production
+continues through darkness and blackouts and follows existing pause/session rules.
+The contextual lighthouse panel shows its island's facility and blocking reasons.
+
+Format 4 stores facility states and omits derived production. Formats 1–3 migrate
+with their first island designated Haven and the others ruined, preserving the
+previous geometry, fuel, and simulation state. Original legacy production must be
+2/s before conversion. No facility upgrade tiers, shipping, radius pricing, or
+scenario objectives are included in this milestone.

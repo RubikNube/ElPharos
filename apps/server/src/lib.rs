@@ -124,7 +124,10 @@ async fn snapshot(socket: &mut WebSocket, updates: &mut watch::Receiver<WorldSta
 fn execute(state: &AppState, command: ClientMessage) -> (Option<String>, Result<(), String>) {
     let mut clock = state.gate.lock().unwrap_or_else(|e| e.into_inner());
     let version = match &command {
-        ClientMessage::SetSimulationPaused {
+        ClientMessage::RestoreFuelFacility {
+            protocol_version, ..
+        }
+        | ClientMessage::SetSimulationPaused {
             protocol_version, ..
         }
         | ClientMessage::SetLighthouseActive {
@@ -182,6 +185,9 @@ fn execute(state: &AppState, command: ClientMessage) -> (Option<String>, Result<
             let mut result = Ok(());
             state.world.send_if_modified(|world| {
                 let change = match command {
+                    ClientMessage::RestoreFuelFacility { island_id, .. } => {
+                        world.restore_fuel_facility(&island_id)
+                    }
                     ClientMessage::SetLighthouseActive {
                         lighthouse_id,
                         active,
