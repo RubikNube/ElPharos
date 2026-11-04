@@ -1,0 +1,144 @@
+import { Application, Container, Graphics, Text } from 'pixi.js';
+import type { WorldState } from '../protocol';
+import { useWorldStore } from '../state/worldStore';
+import { fitWorld, zoomAt, type Camera } from './camera';
+
+export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
+  const app = new Application();
+  await app.init({
+    width: host.clientWidth, height: host.clientHeight,
+    background: '#081521', antialias: true, autoDensity: true,
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    preference: 'webgl', autoStart: false,
+  });
+  if (signal.aborted) { app.destroy(true, { children: true }); return null; }
+  host.appendChild(app.canvas);
+  const worldLayer = new Container();
+  app.stage.addChild(worldLayer);
+  let world: WorldState | null = null;
+  let camera: Camera = { x: 0, y: 0, zoom: 1 };
+  let fitted = false;
+
+  function render() {
+    worldLayer.position.set(camera.x, camera.y);
+    worldLayer.scale.set(camera.zoom);
+    app.render();
+  }
+  function reset() {
+    if (world) camera = fitWorld(app.screen.width, app.screen.height, world.width, world.height);
+    render();
+  }
+  function zoom(factor: number, x = app.screen.width / 2, y = app.screen.height / 2) {
+    camera = zoomAt(camera, x, y, factor);
+    render();
+  }
+  function draw(next: WorldState | null) {
+    world = next;
+    for (const child of worldLayer.removeChildren()) child.destroy({ children: true });
+    if (!world) { render(); return; }
+    // Ocean dimensions and every entity's position/radius are server-owned.
+    worldLayer.addChild(new Graphics().rect(0, 0, world.width, world.height).fill(0x0f2234)
+      .stroke({ color: 0x284356, width: 2 }));
+    for (const island of world.islands) {
+      const { x, y } = island.position;
+      worldLayer.addChild(new Graphics()
+        .ellipse(x, y + 6, island.radius * 1.16, island.radius * 0.83).fill({ color: 0x315564, alpha: 0.4 })
+        .ellipse(x, y, island.radius, island.radius * 0.72).fill(0x887e58)
+        .ellipse(x, y - 5, island.radius * 0.9, island.radius * 0.62).fill(0x425c52));
+      const label = new Text({ text: island.name, style: { fontFamily: 'Georgia', fontSize: 21, fill: 0xd5dfd7, letterSpacing: 2 } });
+      label.anchor.set(0.5, 0);
+      label.position.set(x, y + island.radius * 0.8);
+      worldLayer.addChild(label);
+    }
+    for (const lighthouse of world.lighthouses) {
+      const { x, y } = lighthouse.position;
+      if (lighthouse.active) {
+        const light = new Graphics();
+        for (let ring = 8; ring >= 1; ring--) {
+          light.circle(x, y, lighthouse.radius * ring / 8).fill({ color: 0xffd34d, alpha: 0.018 });
+        }
+        light.circle(x, y, lighthouse.radius).stroke({ color: 0xffd34d, alpha: 0.6, width: 1.5 });
+        worldLayer.addChild(light);
+      }
+      worldLayer.addChild(new Graphics()
+        .ellipse(x, y + 40, 30, 11).fill({ color: 0x081521, alpha: 0.45 })
+        .poly([x - 14, y + 37, x - 9, y - 8, x + 9, y - 8, x + 14, y + 37]).fill(0xeee5cc)
+        .rect(x - 11, y + 12, 22, 8).fill(0xad6950)
+        .rect(x - 12, y - 13, 24, 15).fill(0x283b43)
+        .rect(x - 8, y - 10, 16, 9).fill(lighthouse.active ? 0xffd34d : 0x718487)
+        .poly([x - 17, y - 14, x, y - 27, x + 17, y - 14]).fill(0xad6950)
+        .rect(x - 19, y + 36, 38, 5).fill(0xc5bea7));
+    }
+    if (!fitted) { fitted = true; reset(); } else render();
+  }
+
+  let drag: { id: number; x: number; y: number } | null = null;
+  const down = (event: PointerEvent) => {
+    if (event.button !== 0 || drag) return;
+    host.focus();
+    host.setPointerCapture(event.pointerId);
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    host.classList.add('dragging');
+  };
+  const move = (event: PointerEvent) => {
+    if (!drag || drag.id !== event.pointerId) return;
+    camera.x += event.clientX - drag.x;
+    camera.y += event.clientY - drag.y;
+    drag.x = event.clientX; drag.y = event.clientY;
+    render();
+  };
+  const up = (event: PointerEvent) => {
+    if (drag?.id !== event.pointerId) return;
+    drag = null;
+    if (host.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
+    host.classList.remove('dragging');
+  };
+  const wheel = (event: WheelEvent) => {
+    event.preventDefault();
+    const bounds = host.getBoundingClientRect();
+    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? host.clientHeight : 1);
+    zoom(Math.exp(-Math.max(-500, Math.min(500, delta)) * 0.0015), event.clientX - bounds.left, event.clientY - bounds.top);
+  };
+  const key = (event: KeyboardEvent) => {
+    const shifts: Record<string, [number, number]> = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] };
+    if (shifts[event.key]) {
+      event.preventDefault();
+      const [x, y] = shifts[event.key]; camera.x += x; camera.y += y; render();
+    } else if (['+', '=', '-', '0'].includes(event.key)) {
+      event.preventDefault();
+      if (event.key === '0') reset(); else zoom(event.key === '-' ? 0.8 : 1.25);
+    }
+  };
+  host.addEventListener('pointerdown', down);
+  host.addEventListener('pointermove', move);
+  host.addEventListener('pointerup', up);
+  host.addEventListener('pointercancel', up);
+  host.addEventListener('lostpointercapture', up);
+  host.addEventListener('wheel', wheel, { passive: false });
+  host.addEventListener('keydown', key);
+  const observer = new ResizeObserver(() => {
+    const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);
+    camera.x += (width - app.screen.width) / 2;
+    camera.y += (height - app.screen.height) / 2;
+    app.renderer.resize(width, height); render();
+  });
+  observer.observe(host);
+  const unsubscribe = useWorldStore.subscribe((state, previous) => {
+    if (state.world !== previous.world) draw(state.world);
+  });
+  draw(useWorldStore.getState().world);
+  return {
+    reset, zoom,
+    dispose() {
+      unsubscribe(); observer.disconnect();
+      host.removeEventListener('pointerdown', down);
+      host.removeEventListener('pointermove', move);
+      host.removeEventListener('pointerup', up);
+      host.removeEventListener('pointercancel', up);
+      host.removeEventListener('lostpointercapture', up);
+      host.removeEventListener('wheel', wheel);
+      host.removeEventListener('keydown', key);
+      app.destroy(true, { children: true });
+    },
+  };
+}

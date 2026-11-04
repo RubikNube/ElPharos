@@ -1,0 +1,16 @@
+{
+  "name": "el-pharos",
+  "private": true,
+  "workspaces": ["apps/web"],
+  "engines": { "node": ">=24.0.0" },
+  "overrides": { "minimatch": "^11.0.1" },
+  "scripts": {
+    "dev": "npm run dev --workspace @el-pharos/web",
+    "dev:server": "cargo run -p el-pharos-server",
+    "build": "npm run build --workspace @el-pharos/web",
+    "lint": "npm run lint --workspace @el-pharos/web",
+    "test": "npm run test --workspace @el-pharos/web",
+    "test:ws": "node --test tests/websocket.mjs",
+    "check": "npm run lint && npm test && npm run build && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace"
+  }
+}

@@ -1,0 +1,65 @@
+import { serverMessageSchema, type ClientMessage } from '../protocol';
+import { useWorldStore } from '../state/worldStore';
+
+export function connectWorld() {
+  let socket: WebSocket | null = null;
+  let stopped = false;
+  let attempt = 0;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const url = new URL('/ws', window.location.href);
+  url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+  function connect() {
+    if (stopped) return;
+    useWorldStore.setState({ world: null, connection: attempt ? 'reconnecting' : 'connecting' });
+    const current = new WebSocket(url);
+    socket = current;
+    // An open socket is usable only after receiving a valid world snapshot.
+    deadline = setTimeout(() => current.close(), 10000);
+    current.onmessage = (event: MessageEvent<unknown>) => {
+      if (stopped || current !== socket) return;
+      try {
+        if (typeof event.data !== 'string') throw new Error('Expected text');
+        const message = serverMessageSchema.parse(JSON.parse(event.data));
+        if (message.type === 'error') {
+          useWorldStore.setState({ error: message.message });
+          return;
+        }
+        clearTimeout(deadline);
+        attempt = 0;
+        useWorldStore.setState({ world: message.world, connection: 'connected', error: null });
+      } catch {
+        useWorldStore.setState({ error: 'Received an incompatible world. Check that client and server versions match.' });
+        current.close(1002, 'Invalid server message');
+      }
+    };
+    current.onerror = () => {
+      if (!stopped) useWorldStore.setState({ error: 'Cannot reach the world server. Retrying…' });
+    };
+    current.onclose = () => {
+      clearTimeout(deadline);
+      if (stopped) return;
+      useWorldStore.setState({ world: null, connection: 'reconnecting' });
+      retry = setTimeout(connect, Math.min(1000 * 2 ** Math.min(attempt++, 4), 10000));
+    };
+  }
+  connect();
+
+  return {
+    send(message: ClientMessage) {
+      if (socket?.readyState !== WebSocket.OPEN || useWorldStore.getState().connection !== 'connected') return;
+      socket.send(JSON.stringify(message));
+    },
+    dispose() {
+      stopped = true;
+      clearTimeout(retry);
+      clearTimeout(deadline);
+      if (socket) {
+        socket.onmessage = socket.onerror = socket.onclose = null;
+        socket.close();
+      }
+      useWorldStore.setState({ world: null, connection: 'offline', error: null });
+    },
+  };
+}
