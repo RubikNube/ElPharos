@@ -52,3 +52,10 @@ footer { display: flex; justify-content: space-between; padding: 15px 30px; bord
   aside { width: 100%; border-left: 0; border-top: 1px solid #223847; }
   .field-notes { margin-top: 24px; } footer { padding: 16px; font-size: 9px; }
 }
+
+nav { display: grid; gap: 6px; }
+nav button { text-align: left; font-size: 12px; }
+button[aria-pressed="true"] { border-color: #ffd34d; }
+
+.expand { width: 100%; margin-top: 10px; }
+.save-controls { display: flex; gap: 8px; margin-top: 20px; }

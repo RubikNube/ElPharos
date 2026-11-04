@@ -1,0 +1,111 @@
+import base64, json, os, subprocess, time, urllib.request, urllib.error
+from pathlib import Path
+import tempfile
+root = str(Path(__file__).resolve().parents[1])
+save_dir = tempfile.TemporaryDirectory(prefix='el-pharos-browser-')
+os.environ['EL_PHAROS_SAVE_PATH'] = save_dir.name + '/save.json'
+processes = []
+
+def req(method, path, data=None):
+    body = None if data is None else json.dumps(data).encode()
+    request = urllib.request.Request('http://127.0.0.1:9515' + path, body, {'Content-Type': 'application/json'}, method=method)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)
+    value = result.get('value')
+    if isinstance(value, dict) and 'error' in value: raise RuntimeError(value)
+    return value
+
+def wait_url(url):
+    for _ in range(100):
+        try:
+            urllib.request.urlopen(url, timeout=1).close()
+            return
+        except (OSError, urllib.error.URLError): time.sleep(.1)
+    raise RuntimeError('Not ready: ' + url)
+
+try:
+    for name, command in [('server', ['cargo', 'run', '--quiet', '-p', 'el-pharos-server']), ('web', ['npm', 'run', 'dev']), ('driver', ['chromedriver', '--port=9515'])]:
+        log = open('/tmp/el-pharos-' + name + '.log', 'w')
+        processes.append(subprocess.Popen(command, cwd=root, stdout=log, stderr=log, start_new_session=True))
+    wait_url('http://127.0.0.1:3001/health')
+    wait_url('http://127.0.0.1:5173')
+    wait_url('http://127.0.0.1:9515/status')
+    session = req('POST', '/session', {'capabilities': {'alwaysMatch': {'browserName': 'chrome', 'goog:chromeOptions': {'binary': '/usr/bin/chromium', 'args': ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--window-size=1440,1000']}, 'goog:loggingPrefs': {'browser': 'ALL'}}}})['sessionId']
+    route = '/session/' + session
+    def js(script): return req('POST', route + '/execute/sync', {'script': script, 'args': []})
+    def screenshot(name):
+        data = req('GET', route + '/screenshot')
+        Path('/tmp/el-pharos-' + name + '.png').write_bytes(base64.b64decode(data))
+        return data
+    req('POST', route + '/url', {'url': 'http://127.0.0.1:5173'})
+    for _ in range(100):
+        if js("return document.body.innerText.includes('World connected') && !!document.querySelector('canvas')"): break
+        time.sleep(.1)
+    else: raise RuntimeError(js('return document.body.innerText'))
+    time.sleep(1)
+    assert js("return document.querySelectorAll('canvas').length") == 1
+    assert js("return document.body.innerText.includes('First Haven') && document.body.innerText.includes('Beacon illuminated')")
+    initial = screenshot('lit')
+    js("document.querySelector('.primary').click()")
+    time.sleep(.3)
+    assert js("return document.body.innerText.includes('Beacon extinguished')")
+    dark = screenshot('dark')
+    assert dark != initial
+    js("document.querySelector('.primary').click()")
+    time.sleep(.3)
+    assert js("return document.querySelectorAll('nav button').length") == 1
+    for _ in range(4):
+        js("document.querySelector('.expand').click()")
+        time.sleep(.15)
+    assert js("return document.querySelectorAll('nav button').length") == 2
+    js("document.querySelectorAll('nav button')[1].click()")
+    assert js("return document.querySelector('h2').innerText.includes('Amber Shoal')")
+    js("document.querySelector('.primary').click()")
+    time.sleep(.2)
+    assert js("return document.body.innerText.includes('Beacon illuminated')")
+    js("document.querySelector('.save-controls button').click()")
+    time.sleep(.3)
+    assert js("return document.body.innerText.includes('World saved.')")
+    js("document.querySelector('.expand').click()")
+    time.sleep(.2)
+    assert js("return document.querySelector('dl').innerText.includes('350 units')")
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.3)
+    assert js("return document.body.innerText.includes('World loaded.') && document.querySelector('dl').innerText.includes('290 units')")
+    # Extinguishing preserves discovered entries.
+    js("document.querySelector('.primary').click()")
+    time.sleep(.2)
+    assert js("return document.querySelectorAll('nav button').length") == 2
+    before = screenshot('before-pan')
+    req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 0, 'x': 500, 'y': 400}, {'type': 'pointerDown', 'button': 0}, {'type': 'pointerMove', 'duration': 200, 'x': 650, 'y': 450}, {'type': 'pointerUp', 'button': 0}]}]})
+    assert screenshot('panned') != before
+    assert js("return document.querySelector('h2').innerText.includes('Amber Shoal')")
+    req('POST', route + '/actions', {'actions': [{'type': 'wheel', 'id': 'wheel', 'actions': [{'type': 'scroll', 'x': 600, 'y': 400, 'deltaX': 0, 'deltaY': -350, 'duration': 200}]}]})
+    screenshot('zoomed')
+    js("document.querySelector('.map-controls button:nth-child(2)').click()")
+    time.sleep(.2)
+    screenshot('reset')
+    req('POST', route + '/window/rect', {'width': 390, 'height': 844})
+    time.sleep(.3)
+    assert js('return document.documentElement.scrollWidth <= window.innerWidth')
+    screenshot('mobile')
+    req('POST', route + '/window/rect', {'width': 1440, 'height': 1000})
+    time.sleep(.2)
+    js("document.querySelector('.map-controls button:nth-child(2)').click()")
+    # Hit the first lighthouse using fit-to-world geometry read from the canvas host.
+    coords = js("const r=document.querySelector('.map').getBoundingClientRect(); const z=Math.max(.15, Math.min(4, Math.min(r.width/2400,r.height/1000)*.9)); return [r.x+r.width/2+(800-1200)*z,r.y+r.height/2+(480-500)*z]")
+    req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerMove','duration':0,'x':round(coords[0]),'y':round(coords[1])},{'type':'pointerDown','button':0},{'type':'pointerUp','button':0}]}]})
+    assert js("return document.querySelector('h2').innerText === 'First Light'")
+    logs = req('POST', route + '/log', {'type': 'browser'})
+    severe = [entry for entry in logs if entry['level'] == 'SEVERE' and 'favicon.ico' not in entry['message']]
+    assert not severe, severe
+    print(json.dumps({'canvas': 'one canvas under React StrictMode', 'beacon': 'on/off round trip passed', 'camera': 'drag, wheel, reset exercised', 'mobile': 'no horizontal overflow', 'browser_errors': severe, 'screenshots': '/tmp/el-pharos-{lit,dark,panned,zoomed,reset,mobile}.png'}))
+    req('DELETE', route)
+finally:
+    save_dir.cleanup()
+    import signal
+    for process in reversed(processes):
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+            try: process.wait(timeout=5)
+            except subprocess.TimeoutExpired: os.killpg(process.pid, signal.SIGKILL)

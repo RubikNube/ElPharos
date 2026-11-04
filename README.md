@@ -5,10 +5,10 @@ The [handover](El_Pharos_Project_Handover.md) is the project vision; the
 [implementation plan](docs/implementation-plan.md) explains this session's scope,
 decisions, protocol, and acceptance criteria.
 
-This first playable slice contains one server-owned island and lighthouse, a
-visible illumination radius, camera pan/zoom, and a beacon switch. Switching the
-beacon sends a command to Rust; all connected clients render the resulting world
-snapshot. Restarting the server restores the initial world.
+The playable archipelago contains four server-owned islands and lighthouses.
+Select discovered beacons on the map or in the side panel, activate them, and
+expand their radii to reveal the next island. Connected tabs share the same
+world. Exploration remains dimly visible after a beacon is extinguished.
 
 ## Run locally
 
@@ -38,8 +38,17 @@ Open **http://127.0.0.1:5173**. Vite proxies `/ws` and `/health` to Axum at
 
 Drag the chart to pan; scroll to zoom around the pointer. Use the visible zoom
 and reset controls, or focus the map and press arrow keys, `+`, `-`, and `0`.
-Use **Extinguish beacon / Light the beacon** to change its illumination. Open a
-second tab to see shared updates.
+Select a lighthouse by clicking its marker or its button in the side panel.
+Use **Extinguish beacon / Light the beacon** to change its illumination.
+**Expand radius** adds 60 units for free, up to 650 units. Inactive beacons can
+be upgraded, but only active illumination reveals new areas.
+
+**Save** writes one shared server slot; **Load** replaces the world in every
+connected tab. The default file is `data/savegame.json`, relative to the server
+working directory; override it with `EL_PHAROS_SAVE_PATH`. Restart starts a fresh
+world; use Load to restore the saved one. Camera and selection are local and are
+not saved. Invalid or missing saves leave the world unchanged. Use only one
+server process per save path.
 
 ## Structure and responsibilities
 
@@ -95,7 +104,8 @@ npm run test:ws     # Starts its own Rust server on an ephemeral local port
 ```
 
 The WebSocket test checks health, initial state, malformed commands, unknown IDs,
-protocol mismatch, idempotency, broadcast to two clients, and reconnect snapshots.
+protocol mismatch, idempotency, broadcast to two clients, concurrent upgrades,
+save/load failures, exploration persistence, and loading after a server restart.
 It requires permission to bind a local TCP port. Client tests check geometry
 validation, zoom bounds, cursor anchoring, and fit-to-world behavior.
 
@@ -115,9 +125,8 @@ Frontend output is `apps/web/dist`; backend output is
 bind address; `RUST_LOG` configures tracing. If changing the backend port during
 development, also update the Vite proxy targets.
 
-This is a local, shared in-memory prototype. There are no accounts, persistence,
-resource systems, weather, combat, story, or research. The handover's wider v0.1
-save/load and resource goals are deferred. For deployment, serve the built client
+This is a local prototype with one shared world and an explicit durable save slot. There are no accounts,
+resource systems, weather, combat, story, or research. The handover's resource simulation remains deferred. For deployment, serve the built client
 and proxy `/ws` to Axum under the same origin, with TLS and appropriate access
 control. Vite's development proxy is not part of the production build.
 
@@ -128,3 +137,16 @@ and tuning the renderer bundle is deferred until loading performance is a goal.
 The root `minimatch` override selects the patched 11.x release for development
 tooling until upstream dependency ranges catch up. Recheck the override on future
 ESLint/typescript-eslint upgrades. Lockfiles capture tested dependency versions.
+
+## Milestone browser smoke test
+
+With Python 3, Chromium at `/usr/bin/chromium`, and `chromedriver` installed:
+
+```sh
+python3 tests/browser_smoke.py
+```
+
+This starts local services on ports 3001, 5173, and 9515, uses an isolated
+temporary save slot, and checks discovery, selection, expansion, save/load,
+camera interaction, StrictMode cleanup, and mobile overflow. These ports must
+be free. Screenshots and process logs are written under `/tmp/el-pharos-*`.

@@ -1,103 +1,65 @@
-# El Pharos: first playable foundation
+# El Pharos: archipelago milestone
 
-## Authority and scope
+Implemented in runnable increments: four-island world; local selection and
+contextual panel; authoritative radius expansion; remembered fog; durable save/load.
+React owns controls, Zustand stores snapshots and local selection, Pixi renders,
+and Rust owns all gameplay changes.
 
-Read in full: `El_Pharos_Project_Handover.md`. Its central promise is expanding
-warm light across a dark ocean. The frontend is primarily a renderer; Rust owns
-the world and all gameplay decisions. This session is a deliberately smaller
-slice than the document's full v0.1 roadmap.
+## World and discovery
 
-Deliver one island, one standard beacon, a visible illumination circle, camera
-pan/zoom, and a server-authoritative beacon switch. No weather, combat, story,
-research, resource simulation, population simulation, persistence, fog of war,
-ships, or trade. Fuel and population from the draft models are deferred until
-they have behavior. Tailwind is also deferred: a small stylesheet is sufficient.
+Four deterministic islands form an eastward chain from First Haven. Only First
+Light starts active. Radius upgrades add 60 units to a maximum of 650, including
+on inactive beacons. Maximum historically active radius is stored per lighthouse.
+Because lighthouses do not move and radii only grow, these circles fully describe
+exploration without a grid. Future movement or shrinking must revise this model.
 
-## Implementation sequence and rationale
+Pixi masks render the union of explored circles dimly and currently illuminated
+circles at full brightness. Undiscovered entities are omitted from labels and
+selection. Discovery is based on entity centers. Full snapshots include hidden
+geometry; this prototype's fog is presentation, not multiplayer secrecy.
 
-1. **Workspaces:** npm workspace at `apps/web`, Cargo workspace at `apps/server`.
-   Keep one deployable client and one server; avoid premature shared packages.
-   Lock dependencies and provide build/check commands from the repository root.
-2. **Domain:** Rust `Point`, `Lighthouse`, `Island`, `WorldState`. Stable IDs,
-   island association, dimensions, position, radius, active flag, revision.
-   World initialization belongs only to the server. Reject unknown beacon IDs.
-3. **Transport:** Axum `/health` and `/ws`; JSON protocol version 1. Send a full
-   snapshot immediately and after commands. A Tokio watch channel serializes
-   mutations and publishes the newest state to every connected client. Full
-   snapshots avoid delta ordering/resynchronization complexity at this scale.
-4. **Client data flow:** validate unknown JSON with Zod, then update Zustand.
-   React displays connection status; Pixi subscribes to world state. Retry lost
-   connections with capped backoff, discard stale world on disconnect, disable
-   commands until a valid snapshot arrives. Clean up sockets and timers on unmount.
-5. **Rendering:** one Pixi application with ocean, island, illumination, and
-   beacon graphics. Use #081521, #0F2234, #FFD34D from the handover. All entity
-   placement and illumination distances come from snapshots. Graphics and labels
-   are presentation only. No fabricated client world while connecting.
-6. **Camera:** separate pure camera math from DOM input. Drag with pointer capture;
-   clamp wheel zoom around the cursor; fit/reset to server world dimensions.
-   Provide keyboard navigation and visible zoom/reset controls. Resize with the
-   host element and release listeners, observers, and GPU resources on unmount.
-7. **Playable interaction:** send an idempotent `set_lighthouse_active` command.
-   The server publishes the resulting state, and the light circle changes only
-   after that snapshot. Multiple tabs share one in-memory world.
-8. **Verification:** TypeScript and Vite production build, ESLint, Rust fmt,
-   Clippy, domain tests, camera/protocol tests, and a real WebSocket integration
-   test for initial state, invalid commands, mutation, and multi-client updates.
-   Browser smoke test where browser tooling is available.
+Selection is client-local. Map clicks use a six-pixel movement threshold; dragging
+does not select. The accessible panel list offers the same selections. Selection
+survives snapshots and reconnects if the entity still exists and is discovered.
 
-## Protocol v1
+## Wire protocol 2
 
-Server: `{ "type": "world_snapshot", "protocol_version": 1, "world": ... }`
+Every command includes `protocol_version: 2`.
 
-Client: `{ "type": "set_lighthouse_active", "protocol_version": 1,
-"lighthouse_id": "beacon-1", "active": false }`
+- `set_lighthouse_active`: `lighthouse_id`, `active`.
+- `expand_lighthouse_radius`: `lighthouse_id`.
+- `save_game` and `load_game`: `request_id`.
 
-Server error: `{ "type": "error", "protocol_version": 1, "message": "..." }`
+Snapshots include `radius_step`, `radius_max`, and each lighthouse's
+`explored_radius`, alongside existing geometry and activation fields.
+Save/load return `command_result` with `request_id`, `success`, and `message`.
+Successful commands also return an authoritative snapshot; mutations broadcast.
+Errors preserve the world; capped upgrades and unchanged toggles are no-ops.
+Clients do not replay requests after reconnect. Interrupted save/load feedback
+explicitly states that the outcome is unknown.
 
-Coordinates and radii are world units, y points down. World revision increases
-only when a command actually changes state. Errors do not mutate state. The
-client and server declare their respective wire types; validation and integration
-tests guard the boundary. Generate shared types later if the protocol grows.
+## Persistence
 
-## File ownership
+One server slot, default `data/savegame.json`, overridden by
+`EL_PHAROS_SAVE_PATH`. JSON envelope: `save_version: 1` and `world`.
+Save writes and syncs a temporary file, renames it, then syncs the directory.
+Load validates version, bounded file size, geometry, IDs, references, rules, and
+exploration before replacing the world. Live revision advances on load instead
+of adopting the saved revision. Invalid files never replace current state.
 
-```text
-apps/server/src/{domain,protocol}.rs       pure domain and wire messages
-apps/server/src/lib.rs                   routes and WebSocket sessions
-apps/server/src/main.rs                  process startup and shutdown
-apps/web/src/protocol.ts                 runtime schemas and inferred types
-apps/web/src/network/connection.ts       socket and reconnect lifecycle
-apps/web/src/state/worldStore.ts         received world and connection status
-apps/web/src/rendering/{camera,scene}.ts  camera mathematics and Pixi scene
-apps/web/src/components/WorldMap.tsx     React/Pixi lifecycle boundary
-apps/web/src/App.tsx                     player controls and status
-tests/websocket.mjs                      real-server protocol integration
-```
+A shared mutex serializes all commands, including disk operations executed on
+Tokio's blocking pool. One server process owns a save path. Restart starts the
+default world; loading is explicit. No camera or selection data is persisted.
 
-## Acceptance and operating limits
+## Verification and limits
 
-Run server and Vite, see the server's island and beacon, pan, zoom, reset, and
-toggle the light. A second tab sees the same toggle. Restarting the server resets
-the world and clients reconnect. Malformed input does not crash the service.
+`npm run check` covers lint, TypeScript/build, frontend geometry and visibility
+tests, Rust formatting/Clippy, domain rules, and persistence validation.
+`npm run test:ws` covers real clients, malformed requests, shared updates,
+concurrent upgrades, save/load errors, and process-restart persistence.
+`python3 tests/browser_smoke.py` exercises the UI with Chromium and an isolated
+save file, including mobile layout and browser-console checks.
 
-This is a local prototype, bound to loopback by default. There is one shared
-world, no authentication, no per-player session, and no persistence. Production
-hosting needs TLS termination, same-origin `/ws` proxying, access control, and
-explicit session ownership. These are future deployment work, not game systems
-to add to this slice.
-
-## Completed verification
-
-- `npm run check`: passed (ESLint, three frontend tests, TypeScript/Vite build,
-  Rust formatting, Clippy with warnings denied, and domain test).
-- `npm run test:ws`: passed against a real Axum process and multiple clients.
-- Headless Chromium: rendered one canvas under StrictMode, switched illumination
-  through the backend, exercised drag/wheel/reset, and checked mobile overflow.
-  No application browser errors were reported.
-- Dependency audit after tooling updates and the documented minimatch override:
-  zero reported vulnerabilities.
-- Known build advisory: main JavaScript chunk approximately 600 kB / 180 kB gzip.
-
-API references consulted: [PixiJS Graphics](https://pixijs.com/8.x/guides/components/scene-objects/graphics),
-[Axum WebSockets](https://docs.rs/axum/latest/axum/extract/ws/),
-and [Vite setup](https://vite.dev/guide/).
+The local shared-world prototype has no economy, accounts, construction,
+procedural generation, or simulation loop. The existing bundle-size advisory
+remains; production access control and deployment are outside this milestone.

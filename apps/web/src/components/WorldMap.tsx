@@ -18,7 +18,7 @@ export function WorldMap() {
   return <section className="map-panel" aria-label="Ocean map">
     <div className="map" ref={host} tabIndex={0} role="region"
       aria-label="World map. Drag or use arrow keys to pan. Scroll or press plus and minus to zoom. Press zero to reset." />
-    <div className="map-caption"><span>THE OPEN OCEAN</span><small>One island. One light. A beginning.</small></div>
+    <div className="map-caption"><span>THE OPEN OCEAN</span><small>An archipelago waiting for light.</small></div>
     {error && <p className="map-error" role="alert">{error}</p>}
     <div className="map-controls">
       <button aria-label="Zoom out" onClick={() => scene.current?.zoom(0.8)}>−</button>
