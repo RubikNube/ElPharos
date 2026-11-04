@@ -157,6 +157,11 @@ npm run check       # ESLint, client tests, production build, fmt, Clippy, Rust 
 npm run test:ws     # Starts its own Rust server on an ephemeral local port
 ```
 
+The GitHub Actions **Verify** workflow runs both commands on every push and pull
+request, and supports manual runs. It uses Node.js 24 and stable Rust on Linux,
+and builds the server before the WebSocket test to avoid compilation consuming
+its startup timeout. Browser smoke testing remains a manual check.
+
 The WebSocket test checks health, initial state, malformed commands, unknown IDs,
 protocol mismatch, idempotency, broadcast to two clients, concurrent upgrades,
 save/load failures, exploration persistence, and loading after a server restart.
