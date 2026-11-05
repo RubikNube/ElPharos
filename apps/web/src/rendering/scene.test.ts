@@ -38,7 +38,7 @@ import { createScene } from './scene';
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.init.mockResolvedValue(undefined);
-  mocks.controls.mockReturnValue(mocks.removeControls);
+  mocks.controls.mockReturnValue(Object.assign(mocks.removeControls, { clearHover: vi.fn(), revalidateHover: vi.fn() }));
   mocks.build.mockReturnValue({ worldLayer: {}, ships: [] });
   vi.stubGlobal('window', { devicePixelRatio: 1 });
   vi.stubGlobal('ResizeObserver', class { observe = mocks.observe; disconnect = mocks.disconnect; });

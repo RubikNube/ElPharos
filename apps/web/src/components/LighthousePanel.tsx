@@ -2,6 +2,7 @@ import type { WorldState } from '../protocol';
 import type { WorldStore } from '../state/worldStore';
 import type { WorldCommands } from '../network/commands';
 import { SalvageVesselPanel } from './SalvageVesselPanel';
+import { KeeperStatus } from './LighthouseStatus';
 import { cargoStatus } from '../shipping';
 import { isDiscovered } from '../rendering/visibility';
 import { lighthouseSelection, facilityBlockedReason, isNetworkIlluminated, networkUpkeep } from '../state/worldQueries';
@@ -22,6 +23,7 @@ export function LighthousePanel({ world, selectedId, connection, commands, onSel
         <p className="hint">Beacon upkeep: {lighthouse.fuel_upkeep} fuel/s{!lighthouse.active && ' when lit'}.</p>
         {cannotLight && <p role="status">Not enough fuel for one second of network upkeep.</p>}
         <div className="beacon-status"><span className={lighthouse.active ? 'lit' : ''}>◉</span><strong>{lighthouse.active ? 'Beacon illuminated' : 'Beacon extinguished'}</strong></div>
+        <KeeperStatus key={lighthouse.id} world={world} light={lighthouse} />
         <dl><div><dt>Island</dt><dd>{world.islands.find((island) => island.id === lighthouse.island_id && isDiscovered(world, island.position))?.name ?? 'Uncharted island'}</dd></div>
           <div><dt>Light radius</dt><dd>{lighthouse.radius} units</dd></div></dl>
         <button className="primary" disabled={connection !== 'connected' || cannotLight} onClick={() => commands.setLighthouseActive(lighthouse.id, !lighthouse.active)}>{lighthouse.active ? 'Extinguish beacon' : 'Light the beacon'}</button>

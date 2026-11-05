@@ -5,8 +5,9 @@ import { attachCameraControls } from './cameraControls';
 import { buildWorldLayers } from './worldLayers';
 import { drawSelection } from './selectionLayer';
 import { createShipAnimator } from './shipAnimation';
+import type { LighthouseHover } from './lighthouseHover';
 
-export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void) {
+export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void, onHover?: (hover: LighthouseHover) => void) {
   const app = new Application();
   await app.init({
     width: host.clientWidth, height: host.clientHeight,
@@ -33,16 +34,19 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     app.render();
   }
   function reset() {
+    removeControls.clearHover();
     if (world) camera = fitWorld(app.screen.width, app.screen.height, world.width, world.height);
     render();
   }
   function zoom(factor: number, x = app.screen.width / 2, y = app.screen.height / 2) {
+    removeControls.clearHover();
     camera = zoomAt(camera, x, y, factor);
     render();
   }
 
   function setWorld(next: WorldState | null) {
     world = next;
+    removeControls.revalidateHover();
     for (const child of worldLayer.removeChildren()) child.destroy({ children: true });
     const layers = world ? buildWorldLayers(world) : null;
     if (layers) worldLayer.addChild(layers.worldLayer);
@@ -50,8 +54,9 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     if (world && !fitted) { fitted = true; reset(); }
     animator.update(world, layers?.ships ?? []);
   }
-  const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect });
+  const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect, onHover });
   const observer = new ResizeObserver(() => {
+    removeControls.clearHover();
     const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);
     camera.x += (width - app.screen.width) / 2;
     camera.y += (height - app.screen.height) / 2;

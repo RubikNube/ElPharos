@@ -286,8 +286,23 @@ try:
     js("document.querySelector('.map-controls button:nth-child(2)').click()")
     # Hit the first lighthouse using fit-to-world geometry read from the canvas host.
     coords = js("const r=document.querySelector('.map').getBoundingClientRect(); const z=Math.max(.15, Math.min(4, Math.min(r.width/2400,r.height/1000)*.9)); return [r.x+r.width/2+(800-1200)*z,r.y+r.height/2+(480-500)*z]")
+    def hover_first_light():
+        req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 0, 'x': round(coords[0]), 'y': round(coords[1])}]}]})
+        time.sleep(.75)
+        assert js("return document.querySelector('.lighthouse-tooltip').innerText.includes('First Light')")
+        assert js("const c=document.querySelector('.lighthouse-tooltip').getBoundingClientRect(), m=document.querySelector('.map').getBoundingClientRect(); return c.left>=m.left && c.right<=m.right && c.top>=m.top && c.bottom<=m.bottom")
+    hover_first_light()
+    assert js("return document.querySelector('h2').innerText === 'Amber Shoal Light'")
     req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerMove','duration':0,'x':round(coords[0]),'y':round(coords[1])},{'type':'pointerDown','button':0},{'type':'pointerUp','button':0}]}]})
     assert js("return document.querySelector('h2').innerText === 'First Light'")
+    assert js("return !document.querySelector('.lighthouse-tooltip')")
+    hover_first_light()
+    assert js("return document.querySelector('.lighthouse-tooltip blockquote').innerText === document.querySelector('aside .keeper-status blockquote').innerText")
+    sentence = js("return document.querySelector('.lighthouse-tooltip blockquote').innerText")
+    time.sleep(1.1)
+    assert js("return document.querySelector('.lighthouse-tooltip blockquote').innerText") == sentence
+    req('POST', route + '/actions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': '\ue00c'}, {'type': 'keyUp', 'value': '\ue00c'}]}]})
+    assert js("return !document.querySelector('.lighthouse-tooltip')")
     # Load a low-fuel fixture through the real save slot to exercise blackout and recovery.
     fixture = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
     fixture['world']['economy'].update(fuel=0, paused=False, blackout=False)

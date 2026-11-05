@@ -49,6 +49,10 @@ Open **http://127.0.0.1:5173**. Vite proxies `/ws` and `/health` to Axum at
 Drag the chart to pan; scroll to zoom around the pointer. Use the visible zoom
 and reset controls, or focus the map and press arrow keys, `+`, `-`, and `0`.
 Select a lighthouse by clicking its marker or its button in the side panel.
+Hover over a discovered lighthouse for a short time to see its status and keeper.
+Keeper names remain stable after loading. Their moods reflect darkness, low fuel,
+isolation, or a healthy connection, with a random remark suited to each mood.
+The selected lighthouse's keeper also appears in the side panel.
 Use **Extinguish beacon / Light the beacon** to change its illumination.
 **Expand radius** adds 60 units with no upfront cost, up to 650 units. Inactive beacons can
 be upgraded, but only active illumination reveals new areas.

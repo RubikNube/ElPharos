@@ -32,7 +32,7 @@ export function App() {
       {world && <LighthousePanel world={world} selectedId={selectedId} connection={connection} commands={commands} onSelect={id => useWorldStore.setState({ selectedId: id })} />}
       {!world && <p className="hint">Waiting for the world server…</p>}
       <SaveControls connection={connection} pending={pending} notice={notice} error={error} commands={commands} />
-      <div className="field-notes"><p className="eyebrow">CHART CONTROLS</p><p>Drag to explore<br />Scroll to zoom<br />Reset view to return home</p><small>Keyboard: arrow keys, + / −, and 0</small></div>
+      <div className="field-notes"><p className="eyebrow">CHART CONTROLS</p><p>Hover over a lighthouse for status<br />Click a lighthouse for details<br />Drag to explore<br />Scroll to zoom<br />Reset view to return home</p><small>Keyboard: arrow keys, + / −, and 0</small></div>
     </aside></div>
     <footer><span>FIRST LIGHT <span className="footer-divider">/</span> PROTOTYPE 0.1</span><span>{world ? `${world.islands.filter(island => isDiscovered(world, island.position)).length} islands · ${world.lighthouses.filter(light => isDiscovered(world, light.position)).length} beacons` : 'Establishing connection'}</span></footer>
   </main>;

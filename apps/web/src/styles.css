@@ -40,6 +40,14 @@ h1 { font: 24px Georgia, serif; letter-spacing: 5px; margin: 0; }
 .map-caption small { font: italic 14px Georgia, serif; color: #8098a6; }
 .map-controls { position: absolute; bottom: 24px; left: 24px; display: flex; gap: 6px; }
 .map-error { position: absolute; top: 40%; padding: 20px; background: #081521; }
+.lighthouse-tooltip { position: absolute; z-index: 2; pointer-events: none; width: 280px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow: hidden; padding: 16px; border: 1px solid #718676; border-radius: 6px; background: #0c1c29f5; box-shadow: 0 6px 24px #0008; font-size: 12px; line-height: 1.6; }
+.lighthouse-tooltip > strong { color: #ffd34d; font: 19px Georgia, serif; }
+.lighthouse-tooltip p { margin: 10px 0; }
+.keeper-status { margin: 16px 0; padding-top: 10px; border-top: 1px solid #2b3d47; font-size: 12px; line-height: 1.6; }
+.keeper-status p { margin: 0 0 8px; }
+.keeper-status span { color: #ffd34d; }
+.keeper-status blockquote { margin: 0; color: #b5c3c7; font-style: italic; }
+.lighthouse-tooltip .keeper-status { margin-bottom: 0; }
 aside { width: 300px; flex-shrink: 0; padding: 32px 26px; border-left: 1px solid #223847; background: #0c1c29; overflow-y: auto; }
 .eyebrow { color: #b4a575; font-size: 10px; letter-spacing: 2px; margin: 0 0 16px; }
 h2 { font: 28px Georgia, serif; margin: 0 0 15px; }
