@@ -1,4 +1,4 @@
-import type { WorldState } from './protocol';
+import { cargoSpeed, type WorldState } from './protocol';
 import { isDiscovered } from './rendering/visibility';
 import { useEffect, useRef } from 'react';
 import { WorldMap } from './components/WorldMap';
@@ -33,7 +33,7 @@ export function App() {
         <h3>Fuel: {world.economy.fuel} / {world.economy.capacity}</h3>
         <p>Production: +{world.economy.production}/s · Upkeep: −{upkeep}/s · Net: {world.economy.production - upkeep}/s</p>
         <p role="status">{world.economy.paused ? 'Simulation paused' : 'Simulation running'} · {world.economy.elapsed_seconds}s</p>
-        <button className="pause" disabled={connection !== 'connected'} onClick={() => client.current?.send({ type: 'set_simulation_paused', protocol_version: 7, paused: !world.economy.paused })}>{world.economy.paused ? 'Resume' : 'Pause'}</button>
+        <button className="pause" disabled={connection !== 'connected'} onClick={() => client.current?.send({ type: 'set_simulation_paused', protocol_version: 8, paused: !world.economy.paused })}>{world.economy.paused ? 'Resume' : 'Pause'}</button>
         {world.economy.blackout && <p role="status">Fuel shortage extinguished every beacon. First Haven still produces 2 fuel/s; relight the network when fuel is available.</p>}
       </section>}
       {world?.salvage && <section aria-label="Salvage economy"><h3>Salvage: {world.salvage.reserve} / {world.salvage.rules.capacity}</h3><p>Haven salvage operation: +1 every {world.salvage.rules.haven_period}s. Cargo ships deliver from restored yards.</p><p>{world.salvage.yards.filter(y => y.delivered).length}/2 yards have delivered cargo.</p></section>}
@@ -55,13 +55,26 @@ export function App() {
         <dl><div><dt>Island</dt><dd>{world?.islands.find((island) => island.id === lighthouse.island_id && isDiscovered(world, island.position))?.name ?? 'Uncharted island'}</dd></div>
           <div><dt>Light radius</dt><dd>{lighthouse.radius} units</dd></div></dl>
         <button className="primary" disabled={connection !== 'connected' || cannotLight} onClick={() => client.current?.send({
-          type: 'set_lighthouse_active', protocol_version: 7, lighthouse_id: lighthouse.id, active: !lighthouse.active,
+          type: 'set_lighthouse_active', protocol_version: 8, lighthouse_id: lighthouse.id, active: !lighthouse.active,
         })}>{lighthouse.active ? 'Extinguish beacon' : 'Light the beacon'}</button>
-        <button className="expand" disabled={connection !== 'connected' || lighthouse.radius >= world!.radius_max || (!!world?.salvage && world.salvage.reserve < world.salvage.rules.expand_cost)} onClick={() => client.current?.send({ type: 'expand_lighthouse_radius', protocol_version: 7, lighthouse_id: lighthouse.id })}>Expand radius (+{world!.radius_step}){world?.salvage && ` — ${world.salvage.rules.expand_cost} Salvage`}</button>
+        <button className="expand" disabled={connection !== 'connected' || lighthouse.radius >= world!.radius_max || (!!world?.salvage && world.salvage.reserve < world.salvage.rules.expand_cost)} onClick={() => client.current?.send({ type: 'expand_lighthouse_radius', protocol_version: 8, lighthouse_id: lighthouse.id })}>Expand radius (+{world!.radius_step}){world?.salvage && ` — ${world.salvage.rules.expand_cost} Salvage`}</button>
         {lighthouse.next_fuel_upkeep !== null && <p className="upgrade-preview">After expansion: {lighthouse.next_fuel_upkeep} fuel/s when lit.</p>}
         <p className="hint">Maximum radius: {world!.radius_max} units. {world?.salvage ? `Each expansion costs ${world.salvage.rules.expand_cost} Salvage.` : 'No upfront cost.'} Larger active beacons consume more fuel.</p>
+        {world?.salvage && <section aria-label="Lighthouse specialization">
+          <h3>Specialization</h3>
+          <p>{lighthouse.specialization === 'efficient_lamp' ? 'Efficient lamp' : lighthouse.specialization === 'navigation_beacon' ? 'Navigation beacon' : 'Empty slot'} · One role per lighthouse</p>
+          <p>Efficient lamp saves {world.salvage.rules.efficiency_saving} fuel/s. Navigation beacon makes cargo ships {Math.round((world.salvage.rules.navigation_multiplier - 1) * 100)}% faster on adjoining safe links; bonuses do not stack.</p>
+          {(['efficient_lamp', 'navigation_beacon'] as const).map(role => {
+            const cost = lighthouse.specialization ? world.salvage!.rules.refit_cost : world.salvage!.rules.specialization_cost;
+            const illuminated = world.lighthouses.some(l => l.connected && Math.hypot(l.position.x-lighthouse.position.x, l.position.y-lighthouse.position.y) <= l.radius);
+            return <button key={role} disabled={connection !== 'connected' || lighthouse.specialization === role || !illuminated || world.salvage!.reserve < cost} onClick={() => client.current?.send({ type: 'set_lighthouse_specialization', protocol_version: 8, lighthouse_id: lighthouse.id, specialization: role })}>
+              {lighthouse.specialization === role ? 'Installed: ' : lighthouse.specialization ? 'Refit: ' : 'Install: '}{role === 'efficient_lamp' ? 'Efficient lamp' : 'Navigation beacon'}{lighthouse.specialization !== role && ` — ${cost} Salvage`}
+            </button>;
+          })}
+          <p className="hint">Fitting requires connected illumination and enough Salvage. Refitting replaces the current role.</p>
+        </section>}
         {yard && <section aria-label="Salvage yard"><h3>Salvage yard</h3><p>{yard.restored ? `Stock: ${yard.stock}/${world!.salvage!.rules.local_capacity} · Produces 1 Salvage every ${yard.period}s while connected.` : `Ruined · Produces 1 Salvage every ${yard.period}s when restored and connected.`}</p>
-          {!yard.restored && <><button disabled={connection !== 'connected' || !!facilityBlock || !world?.salvage || world.salvage.reserve < world.salvage.rules.restore_cost} onClick={() => client.current?.send({ type: 'restore_salvage_yard', protocol_version: 7, island_id: yard.island_id })}>Restore salvage yard — {world!.salvage!.rules.restore_fuel} fuel + {world!.salvage!.rules.restore_cost} Salvage</button><p>{facilityBlock ?? (world!.salvage!.reserve < world!.salvage!.rules.restore_cost ? 'Not enough Salvage.' : 'Includes an automatic cargo ship.')}</p></>}
+          {!yard.restored && <><button disabled={connection !== 'connected' || !!facilityBlock || !world?.salvage || world.salvage.reserve < world.salvage.rules.restore_cost} onClick={() => client.current?.send({ type: 'restore_salvage_yard', protocol_version: 8, island_id: yard.island_id })}>Restore salvage yard — {world!.salvage!.rules.restore_fuel} fuel + {world!.salvage!.rules.restore_cost} Salvage</button><p>{facilityBlock ?? (world!.salvage!.reserve < world!.salvage!.rules.restore_cost ? 'Not enough Salvage.' : 'Includes an automatic cargo ship.')}</p></>}
           {ship && <p role="status">Cargo: {ship.cargo}/{world!.salvage!.rules.hold} · {cargoStatus(world!, ship)}</p>}
         </section>}
         {island && island.fuel_facility !== 'none' && <section className="fuel-facility" aria-label="Island fuel facility">
@@ -69,7 +82,7 @@ export function App() {
           <p>{island.fuel_facility === 'ruined' ? 'Ruined · No production' : island.fuel_facility === 'restored' && !lighthouse.connected ? 'Isolated · +0 fuel/s' : `Operational · +${island.fuel_production} fuel/s`}</p>
           {island.fuel_facility === 'ruined' ? <>
             <p>Restore for +3 fuel/s while this beacon is active and connected to First Haven.</p>
-            <button disabled={!!facilityBlock} onClick={() => client.current?.send({ type: 'restore_fuel_facility', protocol_version: 7, island_id: island.id })}>Restore fuel facility — {world!.economy.facility_restore_cost} fuel</button>
+            <button disabled={!!facilityBlock} onClick={() => client.current?.send({ type: 'restore_fuel_facility', protocol_version: 8, island_id: island.id })}>Restore fuel facility — {world!.economy.facility_restore_cost} fuel</button>
             {facilityBlock && <p role="status">{facilityBlock}</p>}
           </> : <p>{island.fuel_facility === 'haven' ? 'First Haven produces even during blackouts.' : lighthouse.connected ? 'Shipping carries fuel through connected light.' : 'Relight this beacon and reconnect overlapping light circles to First Haven to resume production.'}</p>}
         </section>}
@@ -77,8 +90,8 @@ export function App() {
       </>}
       {!world && <p className="hint">Waiting for the world server…</p>}
       <div className="save-controls">
-        <button disabled={connection !== 'connected' || !!pending} onClick={() => client.current?.send({ type: 'save_game', protocol_version: 7, request_id: crypto.randomUUID() })}>Save</button>
-        <button disabled={connection !== 'connected' || !!pending} onClick={() => client.current?.send({ type: 'load_game', protocol_version: 7, request_id: crypto.randomUUID() })}>Load</button>
+        <button disabled={connection !== 'connected' || !!pending} onClick={() => client.current?.send({ type: 'save_game', protocol_version: 8, request_id: crypto.randomUUID() })}>Save</button>
+        <button disabled={connection !== 'connected' || !!pending} onClick={() => client.current?.send({ type: 'load_game', protocol_version: 8, request_id: crypto.randomUUID() })}>Load</button>
       </div>
       <p className="hint">One server save slot. Load replaces the shared world in every connected tab.</p>
       <p role="status">{pending ? (pending.action === 'save_game' ? 'Saving…' : 'Loading…') : notice}</p>
@@ -99,7 +112,7 @@ function cargoStatus(world: WorldState, ship: NonNullable<WorldState['salvage']>
   const remaining = ship.route.slice(1).reduce((sum, id, index) => {
     const a = world.lighthouses.find(l => l.id === ship.route[index]);
     const b = world.lighthouses.find(l => l.id === id);
-    return sum + (a && b ? Math.hypot(a.position.x-b.position.x, a.position.y-b.position.y) * (index === 0 ? 1-ship.progress : 1) : 0);
+    return sum + (a && b ? Math.hypot(a.position.x-b.position.x, a.position.y-b.position.y) * (index === 0 ? 1-ship.progress : 1) / cargoSpeed(world, a.id, b.id) : 0);
   }, 0);
-  return `${ship.returning ? 'Returning to yard' : 'Delivering to Haven'} · ETA ${Math.ceil(remaining/world.salvage!.rules.speed)}s`;
+  return `${ship.returning ? 'Returning to yard' : 'Delivering to Haven'} · ETA ${Math.ceil(remaining)}s`;
 }

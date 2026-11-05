@@ -1,6 +1,6 @@
 import { isDiscovered } from './visibility';
 import { Application, Container, Graphics, Text } from 'pixi.js';
-import type { WorldState } from '../protocol';
+import { cargoSpeed, type WorldState } from '../protocol';
 import { useWorldStore } from '../state/worldStore';
 import { fitWorld, zoomAt, type Camera } from './camera';
 
@@ -31,7 +31,7 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal) {
       if (ship.cargo) {
         const elapsed = world?.economy.paused || reducedMotion.matches || !ship.safe ? 0 : Math.min(1, (now - snapshotTime) / 1000);
         const length = Math.hypot(ship.to.x-ship.from.x, ship.to.y-ship.from.y);
-        const progress = Math.min(1, ship.cargo.progress + (length ? elapsed * (world?.salvage?.rules.speed ?? 60) / length : 0));
+        const progress = Math.min(1, ship.cargo.progress + (length ? elapsed * (world ? cargoSpeed(world, ship.cargo.from, ship.cargo.to) : 60) / length : 0));
         ship.graphic.position.set(ship.from.x + (ship.to.x-ship.from.x)*progress, ship.from.y + (ship.to.y-ship.from.y)*progress);
         ship.graphic.rotation = Math.atan2(ship.to.y-ship.from.y, ship.to.x-ship.from.x);
         continue;

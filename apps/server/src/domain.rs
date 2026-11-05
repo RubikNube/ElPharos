@@ -6,8 +6,22 @@ pub struct Point {
     pub y: f64,
 }
 
+pub const SPECIALIZATION_COST: u32 = 40;
+pub const REFIT_COST: u32 = 20;
+pub const EFFICIENCY_SAVING: f64 = 0.5;
+pub const NAVIGATION_MULTIPLIER: f64 = 1.5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Specialization {
+    EfficientLamp,
+    NavigationBeacon,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lighthouse {
+    #[serde(default)]
+    pub specialization: Option<Specialization>,
     pub id: String,
     pub island_id: String,
     pub name: String,
@@ -22,8 +36,28 @@ impl Lighthouse {
         f64::from(BEACON_UPKEEP) + 0.25 * ((radius - 290.0).max(0.0) / 60.0).ceil()
     }
 
+    pub fn upkeep_for_radius(&self, radius: f64) -> f64 {
+        Self::upkeep_at_radius(radius)
+            - if self.specialization == Some(Specialization::EfficientLamp) {
+                EFFICIENCY_SAVING
+            } else {
+                0.0
+            }
+    }
+
+    pub fn link_speed(&self, other: &Self) -> f64 {
+        crate::salvage::SPEED
+            * if [self.specialization, other.specialization]
+                .contains(&Some(Specialization::NavigationBeacon))
+            {
+                NAVIGATION_MULTIPLIER
+            } else {
+                1.0
+            }
+    }
+
     pub fn upkeep(&self) -> f64 {
-        Self::upkeep_at_radius(self.radius)
+        self.upkeep_for_radius(self.radius)
     }
 }
 
@@ -116,6 +150,7 @@ impl Default for WorldState {
                 radius: 110.0,
             }],
             lighthouses: vec![Lighthouse {
+                specialization: None,
                 id: "beacon-1".into(),
                 island_id: "island-1".into(),
                 name: "First Light".into(),
@@ -138,6 +173,7 @@ impl Default for WorldState {
                 radius: 90.0,
             });
             world.lighthouses.push(Lighthouse {
+                specialization: None,
                 id: format!("beacon-{n}"),
                 island_id: format!("island-{n}"),
                 name: format!("{name} Light"),
@@ -159,6 +195,7 @@ impl Default for WorldState {
                 radius: 65.0,
             });
             world.lighthouses.push(Lighthouse {
+                specialization: None,
                 id: format!("beacon-{n}"),
                 island_id: format!("island-{n}"),
                 name: format!("{name} Light"),
@@ -173,6 +210,40 @@ impl Default for WorldState {
 }
 
 impl WorldState {
+    pub fn specialize(
+        &mut self,
+        id: &str,
+        specialization: Specialization,
+    ) -> Result<bool, &'static str> {
+        let index = self
+            .lighthouses
+            .iter()
+            .position(|l| l.id == id)
+            .ok_or("Unknown lighthouse")?;
+        let light = &self.lighthouses[index];
+        if self.salvage.is_none() {
+            return Err("Specializations require the Salvage ruleset");
+        }
+        if light.specialization == Some(specialization) {
+            return Ok(false);
+        }
+        if !self.is_network_illuminated(&light.position) {
+            return Err("Connect illumination to fit a specialization");
+        }
+        let cost = if light.specialization.is_some() {
+            REFIT_COST
+        } else {
+            SPECIALIZATION_COST
+        };
+        let salvage = self.salvage.as_mut().unwrap();
+        if salvage.reserve < cost {
+            return Err("Not enough Salvage for specialization");
+        }
+        salvage.reserve -= cost;
+        self.lighthouses[index].specialization = Some(specialization);
+        self.revision += 1;
+        Ok(true)
+    }
     /// Active circles joined to the Haven beacon, including boundary contact.
     pub fn connected_beacons(&self) -> Vec<bool> {
         let mut connected = vec![false; self.lighthouses.len()];
@@ -686,5 +757,100 @@ mod network_tests {
         assert_eq!(w.production(), 2);
         w.set_lighthouse_active("beacon-2", true).unwrap();
         assert_eq!(w.production(), 5);
+    }
+}
+
+#[cfg(test)]
+mod specialization_tests {
+    use super::*;
+
+    #[test]
+    fn purchases_refits_and_rejections_are_atomic() {
+        let mut w = WorldState::default();
+        let before = serde_json::to_value(&w).unwrap();
+        assert!(
+            w.specialize("missing", Specialization::EfficientLamp)
+                .is_err()
+        );
+        assert!(
+            w.specialize("beacon-4", Specialization::EfficientLamp)
+                .is_err()
+        );
+        assert_eq!(before, serde_json::to_value(&w).unwrap());
+        w.set_paused(true);
+        assert!(
+            w.specialize("beacon-1", Specialization::EfficientLamp)
+                .unwrap()
+        );
+        assert_eq!(w.salvage.as_ref().unwrap().reserve, 60);
+        assert_eq!(w.upkeep(), 0.5);
+        let revision = w.revision;
+        assert!(
+            !w.specialize("beacon-1", Specialization::EfficientLamp)
+                .unwrap()
+        );
+        assert_eq!(w.revision, revision);
+        w.expand("beacon-1").unwrap();
+        assert_eq!(w.upkeep(), 0.75);
+        w.specialize("beacon-1", Specialization::NavigationBeacon)
+            .unwrap();
+        assert_eq!(w.salvage.as_ref().unwrap().reserve, 20);
+        assert_eq!(w.upkeep(), 1.25);
+        w.salvage.as_mut().unwrap().reserve = 19;
+        let before = serde_json::to_value(&w).unwrap();
+        assert!(
+            w.specialize("beacon-1", Specialization::EfficientLamp)
+                .is_err()
+        );
+        assert_eq!(before, serde_json::to_value(&w).unwrap());
+        assert!(
+            legacy_world()
+                .specialize("beacon-1", Specialization::EfficientLamp)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn efficient_payment_activation_and_blackout() {
+        let mut w = WorldState::default();
+        w.specialize("beacon-1", Specialization::EfficientLamp)
+            .unwrap();
+        w.tick();
+        assert_eq!(w.economy.fuel, 301.5);
+        w.set_lighthouse_active("beacon-1", false).unwrap();
+        w.economy.fuel = 0.5;
+        w.set_lighthouse_active("beacon-1", true).unwrap();
+        assert_eq!(w.upkeep(), 0.5);
+        crate::persistence::validate(&w).unwrap();
+    }
+
+    #[test]
+    fn navigation_boosts_both_directions_without_stacking_and_stops_when_disconnected() {
+        let mut w = WorldState::default();
+        w.restore_salvage_yard("island-5").unwrap();
+        w.set_lighthouse_active("beacon-5", true).unwrap();
+        w.salvage.as_mut().unwrap().yards[0].stock = 20;
+        let mut normal = w.clone();
+        w.specialize("beacon-1", Specialization::NavigationBeacon)
+            .unwrap();
+        normal.tick();
+        w.tick();
+        assert!(
+            (w.salvage.as_ref().unwrap().ships[0].progress
+                / normal.salvage.as_ref().unwrap().ships[0].progress
+                - 1.5)
+                .abs()
+                < 1e-9
+        );
+        w.lighthouses[4].specialization = Some(Specialization::NavigationBeacon);
+        assert_eq!(w.lighthouses[0].link_speed(&w.lighthouses[4]), 90.);
+        assert_eq!(w.lighthouses[4].link_speed(&w.lighthouses[0]), 90.);
+        let progress = w.salvage.as_ref().unwrap().ships[0].progress;
+        w.set_lighthouse_active("beacon-5", false).unwrap();
+        w.tick();
+        assert_eq!(w.salvage.as_ref().unwrap().ships[0].progress, progress);
+        w.set_lighthouse_active("beacon-5", true).unwrap();
+        w.tick();
+        assert_ne!(w.salvage.as_ref().unwrap().ships[0].progress, progress);
     }
 }

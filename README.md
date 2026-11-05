@@ -245,3 +245,23 @@ Wire protocol 7 requires matching client and server versions. The older sections
 above describe the original four-island scenario; these rules supersede them for
 new games. Balance constants live in `apps/server/src/salvage.rs` and are included
 in snapshots for the interface.
+
+## Lighthouse specializations
+
+Select a lighthouse to install one specialization for **40 Salvage**, or refit
+an existing specialization for **20 Salvage**. Fitting requires the beacon's
+position to be under connected illumination; it works while paused or while
+that beacon is inactive. Repeating the installed choice costs nothing.
+
+- **Efficient lamp:** reduces upkeep by **0.5 fuel/second**, including after radius upgrades.
+- **Navigation beacon:** cargo travels **50% faster** on safe links touching
+  this beacon, in either direction. Two navigation beacons on a link do not stack.
+
+Radius upgrades remain separate. Navigation affects travel, not production,
+loading, or capacity. Ships still use shortest-distance routes and stop on unsafe
+links; refitting affects their current leg on the next tick. The UI previews
+benefits and costs, and cargo animation and ETA reflect navigation bonuses.
+
+New saves use format **6** and preserve specializations. Formats 1–5 migrate
+with empty slots; legacy games without Salvage keep their original rules and
+cannot buy specializations. Wire protocol **8** requires matching client and server.

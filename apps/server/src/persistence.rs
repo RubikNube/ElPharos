@@ -68,7 +68,8 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
     }
     let mut light_ids = HashSet::new();
     for light in &world.lighthouses {
-        if light.id.is_empty()
+        if (world.salvage.is_none() && light.specialization.is_some())
+            || light.id.is_empty()
             || !light_ids.insert(&light.id)
             || !ids.contains(&light.island_id)
             || light.name.len() > 200
@@ -97,7 +98,7 @@ pub fn save(path: &Path, world: &WorldState) -> Result<(), String> {
     let temp = path.with_extension("json.tmp");
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let data = serde_json::to_vec_pretty(&Save {
-            save_version: 5,
+            save_version: 6,
             world: world.clone(),
         })?;
         let mut file = fs::File::create(&temp)?;
@@ -125,7 +126,7 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
     let legacy_version = value["save_version"]
         .as_u64()
         .ok_or("Invalid save version")?;
-    if !(1..=5).contains(&legacy_version) {
+    if !(1..=6).contains(&legacy_version) {
         return Err("Unsupported save version".into());
     }
     // Legacy saves have no economy; migration is restricted to version 1.
@@ -177,7 +178,7 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
         }
         value["save_version"] = 4.into();
     }
-    if legacy_version == 5 && value["world"].get("salvage").is_none() {
+    if legacy_version >= 5 && value["world"].get("salvage").is_none() {
         return Err("Missing Salvage ruleset".into());
     }
     if legacy_version <= 4 {
@@ -188,8 +189,20 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
             .insert("salvage".into(), serde_json::Value::Null);
         value["save_version"] = 5.into();
     }
+    if legacy_version <= 5 {
+        for light in value["world"]["lighthouses"]
+            .as_array_mut()
+            .ok_or("Invalid lighthouses")?
+        {
+            light
+                .as_object_mut()
+                .ok_or("Invalid lighthouse")?
+                .insert("specialization".into(), serde_json::Value::Null);
+        }
+        value["save_version"] = 6.into();
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
-    if save.save_version != 5 {
+    if save.save_version != 6 {
         return Err("Unsupported save version".into());
     }
     validate(&save.world)?;
@@ -303,7 +316,7 @@ mod economy_tests {
             serde_json::to_value(&world).unwrap()
         );
         let written: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(written["save_version"], 5);
+        assert_eq!(written["save_version"], 6);
         assert!(
             written["world"]["lighthouses"][0]
                 .get("fuel_upkeep")
@@ -376,6 +389,45 @@ mod facility_tests {
         legacy["world"]["economy"]["production"] = 5.into();
         fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
         assert!(load(&path).is_err());
+        fs::remove_file(path).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod specialization_tests {
+    use super::*;
+    #[test]
+    fn specializations_roundtrip_and_format_five_migrates() {
+        let path = std::env::temp_dir().join(format!(
+            "el-pharos-specialization-{}.json",
+            std::process::id()
+        ));
+        let mut world = WorldState::default();
+        world
+            .specialize("beacon-1", crate::domain::Specialization::EfficientLamp)
+            .unwrap();
+        save(&path, &world).unwrap();
+        assert_eq!(
+            serde_json::to_value(load(&path).unwrap()).unwrap(),
+            serde_json::to_value(&world).unwrap()
+        );
+        let mut old = serde_json::to_value(&world).unwrap();
+        for light in old["lighthouses"].as_array_mut().unwrap() {
+            light.as_object_mut().unwrap().remove("specialization");
+        }
+        fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!({"save_version":5,"world":old})).unwrap(),
+        )
+        .unwrap();
+        let migrated = load(&path).unwrap();
+        assert!(
+            migrated
+                .lighthouses
+                .iter()
+                .all(|l| l.specialization.is_none())
+        );
+        assert_eq!(migrated.salvage.unwrap().reserve, 60);
         fs::remove_file(path).unwrap();
     }
 }

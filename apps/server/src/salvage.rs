@@ -275,7 +275,8 @@ impl WorldState {
                 continue;
             }
             ship.progress = (ship.progress
-                + SPEED / distance(&self.lighthouses[a].position, &self.lighthouses[b].position))
+                + self.lighthouses[a].link_speed(&self.lighthouses[b])
+                    / distance(&self.lighthouses[a].position, &self.lighthouses[b].position))
             .min(1.0);
             if ship.progress >= 1.0 {
                 ship.from = ship.to.clone();
@@ -339,6 +340,10 @@ pub fn validate(w: &WorldState) -> Result<(), String> {
 
 #[derive(Serialize)]
 pub struct Rules {
+    specialization_cost: u32,
+    refit_cost: u32,
+    efficiency_saving: f64,
+    navigation_multiplier: f64,
     capacity: u32,
     expand_cost: u32,
     restore_cost: u32,
@@ -351,6 +356,10 @@ pub struct Rules {
 impl Default for Rules {
     fn default() -> Self {
         Self {
+            specialization_cost: crate::domain::SPECIALIZATION_COST,
+            refit_cost: crate::domain::REFIT_COST,
+            efficiency_saving: crate::domain::EFFICIENCY_SAVING,
+            navigation_multiplier: crate::domain::NAVIGATION_MULTIPLIER,
             capacity: CAPACITY,
             expand_cost: EXPAND_COST,
             restore_cost: RESTORE_COST,

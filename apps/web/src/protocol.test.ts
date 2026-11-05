@@ -3,10 +3,10 @@ import { serverMessageSchema, worldSchema } from './protocol';
 
 it('rejects incompatible protocol versions and invalid geometry', () => {
   expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 99, message: 'test' }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 7, world: {
+  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 8, world: {
     salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: -1, height: 100, islands: [], lighthouses: [],
   } }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 7, message: 'Unknown lighthouse' }).success).toBe(true);
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 8, message: 'Unknown lighthouse' }).success).toBe(true);
 });
 
 it('validates fuel and simulation state from the authoritative snapshot', () => {
@@ -16,7 +16,7 @@ it('validates fuel and simulation state from the authoritative snapshot', () => 
   for (const fuel of [0, 1.25, 42.5, 599.75, 600]) {
     expect(worldSchema.safeParse({ ...world, economy: { ...economy, fuel } }).success).toBe(true);
   }
-  const light = { connected: true, id: 'a', island_id: 'i', name: 'Beacon', position: { x: 10, y: 10 }, radius: 350, explored_radius: 350, active: true, fuel_upkeep: 1.25, next_fuel_upkeep: 1.5 };
+  const light = { specialization: null, connected: true, id: 'a', island_id: 'i', name: 'Beacon', position: { x: 10, y: 10 }, radius: 350, explored_radius: 350, active: true, fuel_upkeep: 1.25, next_fuel_upkeep: 1.5 };
   expect(worldSchema.safeParse({ ...world, lighthouses: [light] }).success).toBe(true);
   expect(worldSchema.safeParse({ ...world, lighthouses: [{ ...light, next_fuel_upkeep: null }] }).success).toBe(true);
   for (const fuel_upkeep of [undefined, 0, 1.1, 3]) {
@@ -51,7 +51,7 @@ it('validates authoritative cargo and Salvage rules', () => {
     objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650, islands: [], lighthouses: [],
   };
   const salvage = {
-    rules: { capacity: 300, expand_cost: 20, restore_cost: 40, restore_fuel: 120, speed: 60, hold: 20, local_capacity: 60, haven_period: 10 },
+    rules: { specialization_cost: 40, refit_cost: 20, efficiency_saving: 0.5, navigation_multiplier: 1.5, capacity: 300, expand_cost: 20, restore_cost: 40, restore_fuel: 120, speed: 60, hold: 20, local_capacity: 60, haven_period: 10 },
     reserve: 60, haven_timer: 1,
     yards: [{ island_id: 'island-5', period: 4, restored: true, stock: 3, timer: 1, delivered: false }],
     ships: [{ yard_id: 'island-5', from: 'beacon-5', to: 'beacon-1', progress: 0.25, cargo: 10, returning: false, route: ['beacon-5', 'beacon-1'] }],

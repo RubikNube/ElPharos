@@ -1,11 +1,16 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 7;
+pub const VERSION: u8 = 8;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    SetLighthouseSpecialization {
+        protocol_version: u8,
+        lighthouse_id: String,
+        specialization: crate::domain::Specialization,
+    },
     RestoreSalvageYard {
         protocol_version: u8,
         island_id: String,
@@ -147,7 +152,7 @@ fn serialize_snapshot<S: serde::Serializer>(
                 lighthouse,
                 fuel_upkeep: lighthouse.upkeep(),
                 next_fuel_upkeep: (lighthouse.radius < world.radius_max).then(|| {
-                    Lighthouse::upkeep_at_radius(
+                    lighthouse.upkeep_for_radius(
                         (lighthouse.radius + world.radius_step).min(world.radius_max),
                     )
                 }),
@@ -182,6 +187,9 @@ mod tests {
     #[test]
     fn snapshots_include_derived_upkeep_and_cap_preview() {
         let mut world = WorldState::default();
+        world
+            .specialize("beacon-1", crate::domain::Specialization::EfficientLamp)
+            .unwrap();
         world.expand("beacon-1").unwrap();
         world.lighthouses[1].radius = 650.;
         let message = serde_json::to_value(ServerMessage::WorldSnapshot {
@@ -190,8 +198,8 @@ mod tests {
         })
         .unwrap();
         let lights = &message["world"]["lighthouses"];
-        assert_eq!(lights[0]["fuel_upkeep"], 1.25);
-        assert_eq!(lights[0]["next_fuel_upkeep"], 1.5);
+        assert_eq!(lights[0]["fuel_upkeep"], 0.75);
+        assert_eq!(lights[0]["next_fuel_upkeep"], 1.0);
         assert_eq!(lights[1]["fuel_upkeep"], 2.5);
         assert!(lights[1]["next_fuel_upkeep"].is_null());
     }
