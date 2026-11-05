@@ -45,11 +45,11 @@ export function connectWorld() {
       }
     };
     current.onerror = () => {
-      if (!stopped) useWorldStore.setState({ error: 'Cannot reach the world server. Retrying…' });
+      if (!stopped && current === socket) useWorldStore.setState({ error: 'Cannot reach the world server. Retrying…' });
     };
     current.onclose = () => {
+      if (stopped || current !== socket) return;
       clearTimeout(deadline);
-      if (stopped) return;
       const interrupted = useWorldStore.getState().pending;
       useWorldStore.setState({ world: null, connection: 'reconnecting', pending: null, notice: interrupted ? 'Connection lost. Save/load outcome is unknown; reconnect before retrying.' : null });
       retry = setTimeout(connect, Math.min(1000 * 2 ** Math.min(attempt++, 4), 10000));
@@ -72,7 +72,7 @@ export function connectWorld() {
         socket.onmessage = socket.onerror = socket.onclose = null;
         socket.close();
       }
-      useWorldStore.setState({ world: null, connection: 'offline', error: null });
+      useWorldStore.setState({ world: null, connection: 'offline', error: null, pending: null, notice: null });
     },
   };
 }

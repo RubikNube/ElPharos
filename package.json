@@ -11,6 +11,7 @@
     "lint": "npm run lint --workspace @el-pharos/web",
     "test": "npm run test --workspace @el-pharos/web",
     "test:ws": "node --test tests/websocket.mjs",
-    "check": "npm run lint && npm test && npm run build && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace"
+    "test:contract": "node --test tests/contract.mjs",
+    "check": "npm run lint && npm test && npm run build && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && npm run test:contract"
   }
 }

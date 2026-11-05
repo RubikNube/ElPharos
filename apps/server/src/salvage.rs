@@ -93,6 +93,7 @@ impl WorldState {
             .ok_or("Missing yard beacon")?
             .id
             .clone();
+        let revision = self.next_revision()?;
         self.economy.fuel -= RESTORE_FUEL;
         let s = self.salvage.as_mut().unwrap();
         s.reserve -= RESTORE_COST;
@@ -110,17 +111,26 @@ impl WorldState {
             returning: false,
             route: vec![],
         });
-        self.revision += 1;
+        self.revision = revision;
         Ok(true)
     }
     /// Dijkstra over safe links. IDs settle equal-distance choices deterministically.
     pub fn cargo_route(&self, start: &str, goal: &str) -> Vec<String> {
-        let connected = self.connected_beacons();
+        self.cargo_route_with_network(start, goal, &crate::network::NetworkView::new(self))
+    }
+
+    fn cargo_route_with_network(
+        &self,
+        start: &str,
+        goal: &str,
+        network: &crate::network::NetworkView,
+    ) -> Vec<String> {
+        let connected = &network.connected;
         let n = self.lighthouses.len();
-        let Some(a) = self.lighthouses.iter().position(|l| l.id == start) else {
+        let Some(a) = network.lighthouse_by_id.get(start).copied() else {
             return vec![];
         };
-        let Some(b) = self.lighthouses.iter().position(|l| l.id == goal) else {
+        let Some(b) = network.lighthouse_by_id.get(goal).copied() else {
             return vec![];
         };
         if !connected[a] || !connected[b] {
@@ -142,11 +152,8 @@ impl WorldState {
                 break;
             }
             done[u] = true;
-            for v in 0..n {
-                if !done[v]
-                    && connected[v]
-                    && Self::overlap(&self.lighthouses[u], &self.lighthouses[v])
-                {
+            for &v in &network.neighbors[u] {
+                if !done[v] {
                     let next = cost[u]
                         + distance(&self.lighthouses[u].position, &self.lighthouses[v].position);
                     if next < cost[v] {
@@ -175,7 +182,9 @@ impl WorldState {
         let Some(mut s) = self.salvage.take() else {
             return;
         };
-        let connected = self.connected_beacons();
+        // Fuel payment may have extinguished the network earlier in this tick.
+        let network = crate::network::NetworkView::new(self);
+        let connected = &network.connected;
         let haven = self
             .lighthouses
             .iter()
@@ -193,13 +202,7 @@ impl WorldState {
             s.reserve = (s.reserve + 1).min(CAPACITY);
         }
         for yard in &mut s.yards {
-            if yard.restored
-                && self
-                    .lighthouses
-                    .iter()
-                    .enumerate()
-                    .any(|(i, l)| l.island_id == yard.island_id && connected[i])
-            {
+            if yard.restored && network.island_connected(&yard.island_id) {
                 yard.timer += 1;
                 if yard.timer == yard.period {
                     yard.timer = 0;
@@ -251,7 +254,7 @@ impl WorldState {
                     }
                 }
                 let goal = if ship.returning { home } else { &haven };
-                ship.route = self.cargo_route(&ship.to, goal);
+                ship.route = self.cargo_route_with_network(&ship.to, goal, &network);
                 if ship.route.len() < 2 {
                     continue;
                 }
@@ -259,16 +262,8 @@ impl WorldState {
                 ship.to = ship.route[1].clone();
                 ship.progress = 0.0;
             }
-            let a = self
-                .lighthouses
-                .iter()
-                .position(|l| l.id == ship.from)
-                .unwrap();
-            let b = self
-                .lighthouses
-                .iter()
-                .position(|l| l.id == ship.to)
-                .unwrap();
+            let a = network.lighthouse_by_id[&ship.from];
+            let b = network.lighthouse_by_id[&ship.to];
             if !connected[a]
                 || !connected[b]
                 || !Self::overlap(&self.lighthouses[a], &self.lighthouses[b])
@@ -337,53 +332,6 @@ pub fn validate(w: &WorldState) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-#[derive(Serialize)]
-pub struct Rules {
-    pub specialization_cost: u32,
-    pub refit_cost: u32,
-    pub efficiency_saving: f64,
-    pub navigation_multiplier: f64,
-    pub capacity: u32,
-    pub expand_cost: u32,
-    pub restore_cost: u32,
-    pub restore_fuel: f64,
-    pub speed: f64,
-    pub hold: u32,
-    pub local_capacity: u32,
-    pub haven_period: u32,
-}
-impl Default for Rules {
-    fn default() -> Self {
-        Self {
-            specialization_cost: crate::domain::SPECIALIZATION_COST,
-            refit_cost: crate::domain::REFIT_COST,
-            efficiency_saving: crate::domain::EFFICIENCY_SAVING,
-            navigation_multiplier: crate::domain::NAVIGATION_MULTIPLIER,
-            capacity: CAPACITY,
-            expand_cost: EXPAND_COST,
-            restore_cost: RESTORE_COST,
-            restore_fuel: RESTORE_FUEL,
-            speed: SPEED,
-            hold: HOLD,
-            local_capacity: LOCAL_CAPACITY,
-            haven_period: HAVEN_PERIOD,
-        }
-    }
-}
-
-impl Rules {
-    pub fn link_speed(&self, a: &crate::domain::Lighthouse, b: &crate::domain::Lighthouse) -> f64 {
-        self.speed
-            * if [a.specialization, b.specialization]
-                .contains(&Some(crate::domain::Specialization::NavigationBeacon))
-            {
-                self.navigation_multiplier
-            } else {
-                1.0
-            }
-    }
 }
 
 #[cfg(test)]

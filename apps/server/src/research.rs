@@ -1,5 +1,7 @@
 //! Permanent research purchased from archives revealed by remembered exploration.
-use crate::domain::{Lighthouse, Specialization, WorldState};
+#[cfg(test)]
+use crate::domain::Specialization;
+use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -150,12 +152,10 @@ impl WorldState {
         if let Some(reason) = self.research_block(technology) {
             return Err(reason);
         }
-        if self.revision >= 9_007_199_254_740_991 {
-            return Err("World revision exhausted");
-        }
+        let revision = self.next_revision()?;
         self.salvage.as_mut().unwrap().reserve -= technology.definition().cost;
         self.research.as_mut().unwrap().completed.push(technology);
-        self.revision += 1;
+        self.revision = revision;
         Ok(true)
     }
 
@@ -175,45 +175,6 @@ impl WorldState {
                 })
                 .collect(),
         })
-    }
-
-    pub fn effective_rules(&self) -> crate::salvage::Rules {
-        use Technology::*;
-        let mut rules = crate::salvage::Rules::default();
-        if self.has_technology(ReinforcedFoundations) {
-            rules.expand_cost = 15;
-        }
-        if self.has_technology(ModularFittings) {
-            rules.specialization_cost = 30;
-            rules.refit_cost = 15;
-        }
-        if self.has_technology(StreamlinedHulls) {
-            rules.speed = 75.0;
-        }
-        if self.has_technology(ExpandedHolds) {
-            rules.hold = 30;
-        }
-        if self.has_technology(PrecisionLenses) {
-            rules.efficiency_saving = 0.75;
-        }
-        rules
-    }
-
-    pub fn lighthouse_upkeep_at_radius(&self, light: &Lighthouse, radius: f64) -> f64 {
-        Lighthouse::upkeep_at_radius(radius)
-            - if light.specialization == Some(Specialization::EfficientLamp) {
-                self.effective_rules().efficiency_saving
-            } else {
-                0.0
-            }
-    }
-
-    pub fn restored_fuel_production(&self) -> u32 {
-        if self.has_technology(Technology::ImprovedRefining) {
-            4
-        } else {
-            3
-        }
     }
 }
 

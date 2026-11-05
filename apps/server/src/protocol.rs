@@ -46,6 +46,48 @@ pub enum ClientMessage {
     },
 }
 
+impl ClientMessage {
+    pub fn version(&self) -> u8 {
+        match self {
+            ClientMessage::ResearchTechnology {
+                protocol_version, ..
+            }
+            | ClientMessage::SetLighthouseSpecialization {
+                protocol_version, ..
+            }
+            | ClientMessage::RestoreSalvageYard {
+                protocol_version, ..
+            }
+            | ClientMessage::RestoreFuelFacility {
+                protocol_version, ..
+            }
+            | ClientMessage::SetSimulationPaused {
+                protocol_version, ..
+            }
+            | ClientMessage::SetLighthouseActive {
+                protocol_version, ..
+            }
+            | ClientMessage::ExpandLighthouseRadius {
+                protocol_version, ..
+            }
+            | ClientMessage::SaveGame {
+                protocol_version, ..
+            }
+            | ClientMessage::LoadGame {
+                protocol_version, ..
+            } => *protocol_version,
+        }
+    }
+
+    pub fn request_id(&self) -> Option<String> {
+        match self {
+            ClientMessage::SaveGame { request_id, .. }
+            | ClientMessage::LoadGame { request_id, .. } => Some(request_id.clone()),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage<'a> {
@@ -114,29 +156,27 @@ fn serialize_snapshot<S: serde::Serializer>(
         from: &'a str,
         to: &'a str,
     }
-    let connected = world.connected_beacons();
-    let mut shipping_links = Vec::new();
-    for (i, a) in world.lighthouses.iter().enumerate() {
-        for (j, b) in world.lighthouses.iter().enumerate().skip(i + 1) {
-            if connected[i] && connected[j] && WorldState::overlap(a, b) {
-                shipping_links.push(ShippingLink {
-                    from: &a.id,
-                    to: &b.id,
-                });
-            }
-        }
-    }
+    let network = crate::network::NetworkView::new(world);
+    let connected = &network.connected;
+    let shipping_links = network
+        .links
+        .iter()
+        .map(|&(i, j)| ShippingLink {
+            from: &world.lighthouses[i].id,
+            to: &world.lighthouses[j].id,
+        })
+        .collect();
     Snapshot {
         salvage: world.salvage.as_ref().map(|data| SalvageSnapshot {
             data,
             rules: world.effective_rules(),
         }),
         research: world.research_snapshot(),
-        objective_complete: world.objective_complete(),
+        objective_complete: world.objective_with_network(&network),
         shipping_links,
         economy: EconomySnapshot {
             economy: &world.economy,
-            production: world.production(),
+            production: world.production_with_network(&network),
             facility_restore_cost: FACILITY_RESTORE_COST,
             restored_facility_production: world.restored_fuel_production(),
         },
@@ -150,7 +190,7 @@ fn serialize_snapshot<S: serde::Serializer>(
             .iter()
             .map(|island| IslandSnapshot {
                 island,
-                fuel_production: world.facility_production(island, &connected),
+                fuel_production: world.facility_production(island, connected),
             })
             .collect(),
         lighthouses: world
@@ -177,7 +217,7 @@ fn serialize_snapshot<S: serde::Serializer>(
 struct SalvageSnapshot<'a> {
     #[serde(flatten)]
     data: &'a crate::salvage::Salvage,
-    rules: crate::salvage::Rules,
+    rules: crate::rules::EffectiveRules,
 }
 
 #[cfg(test)]

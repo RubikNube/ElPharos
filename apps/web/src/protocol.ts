@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const PROTOCOL_VERSION = 9;
+
 const point = z.object({ x: z.number(), y: z.number() });
 const island = z.object({
   id: z.string().min(1), name: z.string(), position: point, radius: z.number().positive(),
@@ -45,17 +47,11 @@ export const worldSchema = z.object({
   if (world.salvage?.ships.some(s => s.cargo > world.salvage!.rules.hold)) ctx.addIssue({ code: 'custom', message: 'Cargo exceeds effective hold' });
 });
 export const serverMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('command_result'), protocol_version: z.literal(9), request_id: z.string(), success: z.boolean(), message: z.string() }),
-  z.object({ type: z.literal('world_snapshot'), protocol_version: z.literal(9), world: worldSchema }),
-  z.object({ type: z.literal('error'), protocol_version: z.literal(9), message: z.string() }),
+  z.object({ type: z.literal('command_result'), protocol_version: z.literal(PROTOCOL_VERSION), request_id: z.string(), success: z.boolean(), message: z.string() }),
+  z.object({ type: z.literal('world_snapshot'), protocol_version: z.literal(PROTOCOL_VERSION), world: worldSchema }),
+  z.object({ type: z.literal('error'), protocol_version: z.literal(PROTOCOL_VERSION), message: z.string() }),
 ]);
 export type WorldState = z.infer<typeof worldSchema>;
-export type ClientMessage = { type: 'research_technology'; protocol_version: 9; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: 9; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: 9; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: 9; island_id: string } | { type: 'set_simulation_paused'; protocol_version: 9; paused: boolean } | { type: 'save_game' | 'load_game'; protocol_version: 9; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: 9; lighthouse_id: string } | {
-  type: 'set_lighthouse_active'; protocol_version: 9; lighthouse_id: string; active: boolean;
+export type ClientMessage = { type: 'research_technology'; protocol_version: typeof PROTOCOL_VERSION; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'set_simulation_paused'; protocol_version: typeof PROTOCOL_VERSION; paused: boolean } | { type: 'save_game' | 'load_game'; protocol_version: typeof PROTOCOL_VERSION; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | {
+  type: 'set_lighthouse_active'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; active: boolean;
 };
-
-export function cargoSpeed(world: WorldState, from: string, to: string): number {
-  const rules = world.salvage?.rules;
-  const boosted = world.lighthouses.some(l => (l.id === from || l.id === to) && l.specialization === 'navigation_beacon');
-  return (rules?.speed ?? 60) * (boosted ? rules?.navigation_multiplier ?? 1 : 1);
-}

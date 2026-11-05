@@ -1,6 +1,7 @@
+import { cargoSpeed } from './shipping';
 import { expect, it } from 'vitest';
 import { researchFixture, researchWorldFixture } from './research.fixture';
-import { cargoSpeed, serverMessageSchema, worldSchema } from './protocol';
+import { serverMessageSchema, worldSchema } from './protocol';
 
 it('rejects incompatible protocol versions and invalid geometry', () => {
   expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 99, message: 'test' }).success).toBe(false);

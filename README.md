@@ -2,8 +2,8 @@
 
 A lighthouse-network strategy game about bringing light to a dark ocean.
 The [handover](El_Pharos_Project_Handover.md) is the project vision; the
-[implementation plan](docs/implementation-plan.md) explains this session's scope,
-decisions, protocol, and acceptance criteria.
+[implementation plan](docs/implementation-plan.md) records the original prototype
+scope. This README describes current behavior and compatibility.
 
 New games contain six islands, including two salvage yards with automatic cargo
 deliveries. See **Salvage and cargo expansion** below for the new economy.
@@ -89,14 +89,18 @@ automatically. The side panel shows fuel, rates, pause status, and shortage feed
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
 preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
-New saves use format 4 and persist facilities rather than derived production. Wire protocol 6 requires matching client and server versions.
+New saves use format 7 and persist facilities, Salvage, specializations, and
+research rather than derived production. Save formats 1–7 remain supported.
+Wire protocol 9 requires matching client and server versions.
 
 ## Connected shipping and scenario goal
 
 First Light anchors the network. Active beacons connect automatically when their
 circles overlap or touch, including through chains of other active beacons.
-Golden links and moving ships show these safe corridors; shipping has no cargo
-inventories, travel delay, or fleet controls. Restored remote facilities stop
+Golden links and moving ships show these safe corridors; legacy saves use
+decorative shipping with no cargo inventories or travel delay. New games use the
+automatic cargo system described below; neither mode has fleet controls.
+Restored remote facilities stop
 producing when their beacon goes dark or loses its connection. Relighting the
 chain resumes production on the next tick. Connectivity and effective production
 are derived after every change and after loading; existing saves adopt these rules.
@@ -108,42 +112,43 @@ completion reflects the current network and play continues afterward.
 ## Structure and responsibilities
 
 ```text
-ElPharos/
-├── El_Pharos_Project_Handover.md
-├── Cargo.toml / Cargo.lock
-├── package.json / package-lock.json
-├── apps/
-│   ├── server/
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── domain.rs                 # World models and mutations
-│   │       ├── protocol.rs               # Versioned JSON commands/snapshots
-│   │       ├── lib.rs                    # Axum routes and WebSocket sessions
-│   │       └── main.rs                   # Bind address, logging, shutdown
-│   └── web/
-│       ├── package.json
-│       ├── index.html
-│       ├── tsconfig.json
-│       ├── vite.config.ts
-│       ├── eslint.config.js
-│       └── src/
-│           ├── main.tsx / App.tsx / styles.css
-│           ├── protocol.ts / protocol.test.ts
-│           ├── components/WorldMap.tsx
-│           ├── network/connection.ts
-│           ├── state/worldStore.ts
-│           └── rendering/
-│               ├── scene.ts
-│               └── camera.ts / camera.test.ts
-├── docs/implementation-plan.md
-└── tests/websocket.mjs
+apps/server/src/
+  domain.rs                 World data, commands, and tick ordering
+  scenario.rs               Initial archipelago construction
+  rules.rs / research.rs    Effective gameplay rules and archive progression
+  network.rs / salvage.rs   Derived connectivity, routing, and cargo simulation
+  service.rs                Serialized commands, clock, sessions, and save/load
+  lib.rs / main.rs          HTTP/WebSocket transport and process startup
+  persistence.rs            Bounded reads and atomic save writes
+  persistence/migrations.rs Historical save decoding
+  validation.rs             Domain invariants independent of storage
+  protocol.rs               Wire commands and derived snapshot serialization
+apps/web/src/
+  App.tsx / components/     Application composition and presentation panels
+  network/                  Connection lifecycle, command builders, React hook
+  state/                    Snapshot store and pure presentation queries
+  protocol.ts / shipping.ts Validated wire contract and shipping presentation
+  rendering/                Scene controller, world/selection layers, camera
+                            controls, visibility, and ship animation
+apps/server/examples/contract_snapshots.rs
+                            Real server messages for contract validation
+tests/                      Protocol contract, WebSocket, and browser checks
 ```
 
 Rust owns entity IDs, positions, geometry, beacon activation, and world revision.
 Axum sends a snapshot on connection and after commands; Tokio watch channels
 publish the latest world to all clients. Zustand stores validated snapshots and
 connection status. React owns the interface; Pixi owns the map and camera. No
-simulation or default world is duplicated in the client.
+simulation or default world is duplicated in the client. Components use named
+commands and pure presentation queries; the React map adapter passes snapshots
+and selection to Pixi explicitly. Selection redraws only its overlay.
+
+The game service serializes mutations, persistence, and ticks through one gate.
+Each snapshot builds one operation-local network view, shared by connectivity,
+production, objectives, and shipping links. Cargo routing shares the post-fuel
+network view during each tick, so a blackout stops shipping immediately.
+Effective rules collect research effects without changing the stored world or
+wire representation. Save migrations preserve the original scenario and ruleset.
 
 World geometry uses arbitrary world units, with positive y pointing down. The
 camera is local presentation state and never changes the domain. Pixi renders on
@@ -154,8 +159,9 @@ StrictMode's asynchronous mount/unmount cycle.
 ## Verify
 
 ```sh
-npm run check       # ESLint, client tests, production build, fmt, Clippy, Rust tests
+npm run check       # ESLint, client tests/build, fmt, Clippy, Rust tests, wire contract
 npm run test:ws     # Starts its own Rust server on an ephemeral local port
+python3 tests/browser_smoke.py  # Requires Chromium and ChromeDriver
 ```
 
 The GitHub Actions **Verify** workflow runs both commands on every push and pull
@@ -166,8 +172,13 @@ its startup timeout. Browser smoke testing remains a manual check.
 The WebSocket test checks health, initial state, malformed commands, unknown IDs,
 protocol mismatch, idempotency, broadcast to two clients, concurrent upgrades,
 save/load failures, exploration persistence, and loading after a server restart.
-It requires permission to bind a local TCP port. Client tests check geometry
-validation, zoom bounds, cursor anchoring, and fit-to-world behavior.
+It requires permission to bind a local TCP port. Client tests check protocol
+validation, zoom bounds, cursor anchoring, connection
+backoff and disposal, scene cancellation and overlay updates, and ship motion
+under pause, blockage, and reduced-motion preferences. The contract check feeds
+actual Rust messages (new, legacy, researched, paused, and blackout worlds) into
+the frontend Zod schema. Rust tests cover revision-limit atomicity and migration
+of every supported save format.
 
 Browser smoke validation was also performed in headless Chromium: one canvas
 under StrictMode, active/inactive beacon rendering, dragging, wheel zoom, reset,
@@ -185,8 +196,10 @@ Frontend output is `apps/web/dist`; backend output is
 bind address; `RUST_LOG` configures tracing. If changing the backend port during
 development, also update the Vite proxy targets.
 
-This is a local prototype with one shared world and an explicit durable save slot. There are no accounts,
-general construction, trade, weather, combat, story, or research. Fuel is the first resource system; further economy features remain deferred. For deployment, serve the built client
+This is a local prototype with one shared world and an explicit durable save slot.
+Fuel, Salvage, automatic cargo shipping, lighthouse specializations, and archive
+research are implemented. Accounts, general construction, trade, weather, combat,
+and story remain deferred. For deployment, serve the built client
 and proxy `/ws` to Axum under the same origin, with TLS and appropriate access
 control. Vite's development proxy is not part of the production build.
 
@@ -239,13 +252,13 @@ latest server snapshot and respect pause and reduced-motion preferences.
 
 New objectives include restoring both yards and receiving a delivery from each,
 as well as restoring the three fuel facilities and connecting all six beacons
-with sustainable fuel. Saves use format 5 and preserve production timers and
-cargo in transit. Formats 1–4 retain their original map, free expansion, and
-objective under a legacy ruleset, which remains in effect after saving again.
-Wire protocol 7 requires matching client and server versions. The older sections
+with sustainable fuel. Production timers and cargo in transit are saved.
+Formats 1–4 retain their original map, free expansion, and objective under a
+legacy ruleset, which remains in effect after saving again. Current saves use
+format 7 and matching clients and servers use wire protocol 9. The older sections
 above describe the original four-island scenario; these rules supersede them for
-new games. Balance constants live in `apps/server/src/salvage.rs` and are included
-in snapshots for the interface.
+new games. Base Salvage constants live in `apps/server/src/salvage.rs`;
+`apps/server/src/rules.rs` collects effective rules for simulation and snapshots.
 
 ## Lighthouse specializations
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createScene } from '../rendering/scene';
+import { useWorldStore } from '../state/worldStore';
 
 export function WorldMap() {
   const host = useRef<HTMLDivElement>(null);
@@ -7,12 +8,22 @@ export function WorldMap() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const abort = new AbortController();
-    void createScene(host.current!, abort.signal).then((created) => {
-      if (abort.signal.aborted) created?.dispose(); else scene.current = created;
+    let unsubscribe: (() => void) | undefined;
+    void createScene(host.current!, abort.signal, selectedId => useWorldStore.setState({ selectedId })).then((created) => {
+      if (abort.signal.aborted) { created?.dispose(); return; }
+      scene.current = created;
+      if (!created) return;
+      const state = useWorldStore.getState();
+      created.setWorld(state.world);
+      created.setSelection(state.selectedId);
+      unsubscribe = useWorldStore.subscribe((state, previous) => {
+        if (state.world !== previous.world) created.setWorld(state.world);
+        if (state.selectedId !== previous.selectedId) created.setSelection(state.selectedId);
+      });
     }).catch(() => {
       if (!abort.signal.aborted) setError('The map could not start. Please use a browser with WebGL enabled.');
     });
-    return () => { abort.abort(); scene.current?.dispose(); scene.current = null; };
+    return () => { abort.abort(); unsubscribe?.(); scene.current?.dispose(); scene.current = null; };
   }, []);
 
   return <section className="map-panel" aria-label="Ocean map">

@@ -1,4 +1,4 @@
-import { cargoSpeed, type WorldState } from './protocol';
+import type { WorldState } from './protocol';
 
 export function cargoStatus(world: WorldState, ship: NonNullable<WorldState['salvage']>['ships'][number]) {
   const from = world.lighthouses.find(l => l.id === ship.from);
@@ -13,4 +13,10 @@ export function cargoStatus(world: WorldState, ship: NonNullable<WorldState['sal
     return sum + (a && b ? Math.hypot(a.position.x-b.position.x, a.position.y-b.position.y) * (index === 0 ? 1-ship.progress : 1) / cargoSpeed(world, a.id, b.id) : 0);
   }, 0);
   return `${ship.returning ? 'Returning to yard' : 'Delivering to Haven'} · ETA ${Math.ceil(remaining)}s`;
+}
+
+export function cargoSpeed(world: WorldState, from: string, to: string): number {
+  const rules = world.salvage?.rules;
+  const boosted = world.lighthouses.some(l => (l.id === from || l.id === to) && l.specialization === 'navigation_beacon');
+  return (rules?.speed ?? 60) * (boosted ? rules?.navigation_multiplier ?? 1 : 1);
 }

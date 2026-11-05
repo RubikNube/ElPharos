@@ -6,6 +6,8 @@ pub struct Point {
     pub y: f64,
 }
 
+pub const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
 pub const SPECIALIZATION_COST: u32 = 40;
 pub const REFIT_COST: u32 = 20;
 pub const EFFICIENCY_SAVING: f64 = 0.5;
@@ -111,83 +113,18 @@ pub struct WorldState {
 
 impl Default for WorldState {
     fn default() -> Self {
-        let mut world = Self {
-            research: Some(crate::research::Research::default()),
-            salvage: Some(crate::salvage::Salvage::default()),
-            economy: Economy::default(),
-            revision: 0,
-            radius_step: 60.0,
-            radius_max: 650.0,
-            width: 2400.0,
-            height: 1000.0,
-            islands: vec![Island {
-                fuel_facility: FuelFacility::Haven,
-                id: "island-1".into(),
-                name: "First Haven".into(),
-                position: Point { x: 800.0, y: 500.0 },
-                radius: 110.0,
-            }],
-            lighthouses: vec![Lighthouse {
-                specialization: None,
-                id: "beacon-1".into(),
-                island_id: "island-1".into(),
-                name: "First Light".into(),
-                position: Point { x: 800.0, y: 480.0 },
-                radius: 290.0,
-                active: true,
-                explored_radius: 290.0,
-            }],
-        };
-        for (n, x, y, name) in [
-            (2, 1250.0, 650.0, "Amber Shoal"),
-            (3, 1700.0, 450.0, "Quiet Reach"),
-            (4, 2150.0, 650.0, "Last Anchorage"),
-        ] {
-            world.islands.push(Island {
-                fuel_facility: FuelFacility::Ruined,
-                id: format!("island-{n}"),
-                name: name.into(),
-                position: Point { x, y },
-                radius: 90.0,
-            });
-            world.lighthouses.push(Lighthouse {
-                specialization: None,
-                id: format!("beacon-{n}"),
-                island_id: format!("island-{n}"),
-                name: format!("{name} Light"),
-                position: Point { x, y: y - 20.0 },
-                radius: 290.0,
-                active: false,
-                explored_radius: 0.0,
-            });
-        }
-        for (n, x, y, name) in [
-            (5, 900.0, 330.0, "Wreckers' Cove"),
-            (6, 1000.0, 680.0, "Iron Shoal"),
-        ] {
-            world.islands.push(Island {
-                fuel_facility: FuelFacility::None,
-                id: format!("island-{n}"),
-                name: name.into(),
-                position: Point { x, y },
-                radius: 65.0,
-            });
-            world.lighthouses.push(Lighthouse {
-                specialization: None,
-                id: format!("beacon-{n}"),
-                island_id: format!("island-{n}"),
-                name: format!("{name} Light"),
-                position: Point { x, y: y - 20.0 },
-                radius: 290.0,
-                active: false,
-                explored_radius: 0.0,
-            });
-        }
-        world
+        crate::scenario::new_world()
     }
 }
 
 impl WorldState {
+    pub(crate) fn next_revision(&self) -> Result<u64, &'static str> {
+        self.revision
+            .checked_add(1)
+            .filter(|revision| *revision <= MAX_SAFE_INTEGER)
+            .ok_or("World revision exhausted")
+    }
+
     pub fn specialize(
         &mut self,
         id: &str,
@@ -214,43 +151,19 @@ impl WorldState {
         } else {
             rules.specialization_cost
         };
-        let salvage = self.salvage.as_mut().unwrap();
-        if salvage.reserve < cost {
+        if self.salvage.as_ref().unwrap().reserve < cost {
             return Err("Not enough Salvage for specialization");
         }
+        let revision = self.next_revision()?;
+        let salvage = self.salvage.as_mut().unwrap();
         salvage.reserve -= cost;
         self.lighthouses[index].specialization = Some(specialization);
-        self.revision += 1;
+        self.revision = revision;
         Ok(true)
     }
     /// Active circles joined to the Haven beacon, including boundary contact.
     pub fn connected_beacons(&self) -> Vec<bool> {
-        let mut connected = vec![false; self.lighthouses.len()];
-        for (i, light) in self.lighthouses.iter().enumerate() {
-            connected[i] = light.active
-                && self.islands.iter().any(|island| {
-                    island.id == light.island_id && island.fuel_facility == FuelFacility::Haven
-                });
-        }
-        loop {
-            let mut changed = false;
-            for (i, light) in self.lighthouses.iter().enumerate() {
-                if light.active
-                    && !connected[i]
-                    && self
-                        .lighthouses
-                        .iter()
-                        .enumerate()
-                        .any(|(j, other)| connected[j] && Self::overlap(light, other))
-                {
-                    connected[i] = true;
-                    changed = true;
-                }
-            }
-            if !changed {
-                return connected;
-            }
-        }
+        crate::network::NetworkView::new(self).connected
     }
 
     pub fn overlap(a: &Lighthouse, b: &Lighthouse) -> bool {
@@ -277,14 +190,21 @@ impl WorldState {
     }
 
     pub fn production(&self) -> u32 {
-        let connected = self.connected_beacons();
+        self.production_with_network(&crate::network::NetworkView::new(self))
+    }
+
+    pub(crate) fn production_with_network(&self, network: &crate::network::NetworkView) -> u32 {
         self.islands
             .iter()
-            .map(|island| self.facility_production(island, &connected))
+            .map(|island| self.facility_production(island, &network.connected))
             .sum()
     }
 
     pub fn objective_complete(&self) -> bool {
+        self.objective_with_network(&crate::network::NetworkView::new(self))
+    }
+
+    pub(crate) fn objective_with_network(&self, network: &crate::network::NetworkView) -> bool {
         self.salvage
             .as_ref()
             .is_none_or(|s| s.yards.iter().all(|y| y.restored && y.delivered))
@@ -292,17 +212,12 @@ impl WorldState {
                 .islands
                 .iter()
                 .all(|island| island.fuel_facility != FuelFacility::Ruined)
-            && self.connected_beacons().iter().all(|connected| *connected)
-            && f64::from(self.production()) >= self.upkeep()
+            && network.connected.iter().all(|connected| *connected)
+            && f64::from(self.production_with_network(network)) >= self.upkeep()
     }
 
     pub fn is_network_illuminated(&self, position: &Point) -> bool {
-        let connected = self.connected_beacons();
-        self.lighthouses.iter().enumerate().any(|(i, light)| {
-            connected[i]
-                && (position.x - light.position.x).hypot(position.y - light.position.y)
-                    <= light.radius
-        })
+        crate::network::NetworkView::new(self).illuminates(self, position)
     }
 
     pub fn is_illuminated(&self, position: &Point) -> bool {
@@ -331,19 +246,20 @@ impl WorldState {
         if self.economy.fuel < f64::from(FACILITY_RESTORE_COST) {
             return Err("Not enough fuel to restore facility");
         }
+        let revision = self.next_revision()?;
         self.economy.fuel -= f64::from(FACILITY_RESTORE_COST);
         self.islands[index].fuel_facility = FuelFacility::Restored;
-        self.revision += 1;
+        self.revision = revision;
         Ok(true)
     }
 
     pub fn tick(&mut self) -> bool {
-        if self.economy.paused
-            || self.revision >= 9_007_199_254_740_991
-            || self.economy.elapsed_seconds >= 9_007_199_254_740_991
-        {
+        if self.economy.paused || self.economy.elapsed_seconds >= MAX_SAFE_INTEGER {
             return false;
         }
+        let Ok(revision) = self.next_revision() else {
+            return false;
+        };
         let production = self.production();
         let upkeep = self.upkeep();
         let e = &mut self.economy;
@@ -360,7 +276,7 @@ impl WorldState {
         self.tick_salvage();
         let e = &mut self.economy;
         e.elapsed_seconds += 1;
-        self.revision += 1;
+        self.revision = revision;
         true
     }
 
@@ -372,13 +288,14 @@ impl WorldState {
             .sum()
     }
 
-    pub fn set_paused(&mut self, paused: bool) -> bool {
+    pub fn set_paused(&mut self, paused: bool) -> Result<bool, &'static str> {
         if self.economy.paused == paused {
-            return false;
+            return Ok(false);
         }
+        let revision = self.next_revision()?;
         self.economy.paused = paused;
-        self.revision += 1;
-        true
+        self.revision = revision;
+        Ok(true)
     }
 
     pub fn expand(&mut self, id: &str) -> Result<bool, &'static str> {
@@ -390,6 +307,11 @@ impl WorldState {
         if candidate.radius >= self.radius_max {
             return Ok(false);
         }
+        let radius = (candidate.radius + self.radius_step).min(self.radius_max);
+        if radius == candidate.radius {
+            return Ok(false);
+        }
+        let revision = self.next_revision()?;
         let expand_cost = self.effective_rules().expand_cost;
         if let Some(s) = &mut self.salvage {
             if s.reserve < expand_cost {
@@ -402,15 +324,11 @@ impl WorldState {
             .iter_mut()
             .find(|l| l.id == id)
             .ok_or("Unknown lighthouse")?;
-        let radius = (light.radius + self.radius_step).min(self.radius_max);
-        if radius == light.radius {
-            return Ok(false);
-        }
         light.radius = radius;
         if light.active {
             light.explored_radius = light.explored_radius.max(radius);
         }
-        self.revision += 1;
+        self.revision = revision;
         Ok(true)
     }
 
@@ -427,6 +345,11 @@ impl WorldState {
         {
             return Err("Not enough fuel for one second of network upkeep");
         }
+        let revision = if light.active == active {
+            return Ok(false);
+        } else {
+            self.next_revision()?
+        };
         let lighthouse = self
             .lighthouses
             .iter_mut()
@@ -442,7 +365,7 @@ impl WorldState {
         if active {
             lighthouse.explored_radius = lighthouse.explored_radius.max(lighthouse.radius);
         }
-        self.revision += 1;
+        self.revision = revision;
         Ok(true)
     }
 }
@@ -509,12 +432,12 @@ mod economy_tests {
         w.economy.fuel = 600.0;
         w.tick();
         assert_eq!(w.economy.fuel, 599.0);
-        assert!(w.set_paused(true));
+        assert!(w.set_paused(true).unwrap());
         let before = serde_json::to_value(&w).unwrap();
         assert!(!w.tick());
-        assert!(!w.set_paused(true));
+        assert!(!w.set_paused(true).unwrap());
         assert_eq!(before, serde_json::to_value(&w).unwrap());
-        w.set_paused(false);
+        w.set_paused(false).unwrap();
         for l in &mut w.lighthouses {
             l.active = true;
             l.explored_radius = l.radius;
@@ -630,7 +553,7 @@ mod facility_tests {
         assert!(w.restore_fuel_facility("island-2").is_err());
         assert_eq!(serde_json::to_value(&w).unwrap(), before);
         w.economy.fuel = 120.;
-        w.set_paused(true);
+        w.set_paused(true).unwrap();
         let revision = w.revision;
         assert_eq!(w.restore_fuel_facility("island-2"), Ok(true));
         assert_eq!(w.economy.fuel, 0.);
@@ -642,7 +565,7 @@ mod facility_tests {
         assert_eq!(w.restore_fuel_facility("island-1"), Ok(false));
         assert_eq!(w.revision, revision);
         assert!(!w.tick());
-        w.set_paused(false);
+        w.set_paused(false).unwrap();
         w.tick();
         assert_eq!(w.economy.fuel, 2.);
     }
@@ -762,7 +685,7 @@ mod specialization_tests {
                 .is_err()
         );
         assert_eq!(before, serde_json::to_value(&w).unwrap());
-        w.set_paused(true);
+        w.set_paused(true).unwrap();
         assert!(
             w.specialize("beacon-1", Specialization::EfficientLamp)
                 .unwrap()
@@ -845,5 +768,58 @@ mod specialization_tests {
         w.set_lighthouse_active("beacon-5", true).unwrap();
         w.tick();
         assert_ne!(w.salvage.as_ref().unwrap().ships[0].progress, progress);
+    }
+}
+
+#[cfg(test)]
+mod revision_tests {
+    use super::*;
+    use crate::research::Technology;
+
+    type Mutation = fn(&mut WorldState) -> Result<bool, &'static str>;
+
+    #[test]
+    fn every_command_checks_revision_before_spending_or_mutating() {
+        let mutations: [Mutation; 7] = [
+            |w| w.expand("beacon-1"),
+            |w| w.set_lighthouse_active("beacon-1", false),
+            |w| w.set_paused(true),
+            |w| w.restore_fuel_facility("island-2"),
+            |w| w.restore_salvage_yard("island-5"),
+            |w| w.specialize("beacon-1", Specialization::EfficientLamp),
+            |w| w.research_technology(Technology::ReinforcedFoundations),
+        ];
+        for mutate in mutations {
+            let mut world = WorldState::default();
+            for light in &mut world.lighthouses {
+                light.active = true;
+                light.explored_radius = light.radius;
+            }
+            world.revision = MAX_SAFE_INTEGER;
+            let before = serde_json::to_value(&world).unwrap();
+            assert_eq!(mutate(&mut world), Err("World revision exhausted"));
+            assert_eq!(serde_json::to_value(&world).unwrap(), before);
+            assert!(!world.tick());
+            assert_eq!(serde_json::to_value(&world).unwrap(), before);
+            world.revision -= 1;
+            assert_eq!(mutate(&mut world), Ok(true));
+            assert_eq!(world.revision, MAX_SAFE_INTEGER);
+        }
+    }
+
+    #[test]
+    fn unchanged_commands_still_succeed_at_the_revision_limit() {
+        let mut world = WorldState {
+            revision: MAX_SAFE_INTEGER,
+            ..WorldState::default()
+        };
+        world.lighthouses[0].radius = world.radius_max;
+        world.lighthouses[0].explored_radius = world.radius_max;
+        let before = serde_json::to_value(&world).unwrap();
+        assert_eq!(world.set_paused(false), Ok(false));
+        assert_eq!(world.set_lighthouse_active("beacon-1", true), Ok(false));
+        assert_eq!(world.expand("beacon-1"), Ok(false));
+        assert_eq!(world.restore_fuel_facility("island-1"), Ok(false));
+        assert_eq!(serde_json::to_value(&world).unwrap(), before);
     }
 }

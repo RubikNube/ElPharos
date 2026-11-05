@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { WorldState } from '../protocol';
 
-type WorldStore = {
+export type WorldStore = {
   world: WorldState | null;
   selectedId: string | null;
   pending: { id: string; action: string } | null;
