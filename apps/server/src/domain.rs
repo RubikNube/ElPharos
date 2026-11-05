@@ -375,7 +375,7 @@ fn legacy_world() -> WorldState {
     let mut w = WorldState {
         salvage: None,
         research: None,
-        ..WorldState::default()
+        ..crate::scenario::fixed_world()
     };
     w.islands.truncate(4);
     w.lighthouses.truncate(4);
@@ -674,7 +674,7 @@ mod specialization_tests {
 
     #[test]
     fn purchases_refits_and_rejections_are_atomic() {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         let before = serde_json::to_value(&w).unwrap();
         assert!(
             w.specialize("missing", Specialization::EfficientLamp)
@@ -720,7 +720,7 @@ mod specialization_tests {
 
     #[test]
     fn efficient_payment_activation_and_blackout() {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         w.specialize("beacon-1", Specialization::EfficientLamp)
             .unwrap();
         w.tick();
@@ -734,7 +734,7 @@ mod specialization_tests {
 
     #[test]
     fn navigation_boosts_both_directions_without_stacking_and_stops_when_disconnected() {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         w.restore_salvage_yard("island-5").unwrap();
         w.set_lighthouse_active("beacon-5", true).unwrap();
         w.salvage.as_mut().unwrap().yards[0].stock = 20;
@@ -790,7 +790,7 @@ mod revision_tests {
             |w| w.research_technology(Technology::ReinforcedFoundations),
         ];
         for mutate in mutations {
-            let mut world = WorldState::default();
+            let mut world = crate::scenario::fixed_world();
             for light in &mut world.lighthouses {
                 light.active = true;
                 light.explored_radius = light.radius;
@@ -811,7 +811,7 @@ mod revision_tests {
     fn unchanged_commands_still_succeed_at_the_revision_limit() {
         let mut world = WorldState {
             revision: MAX_SAFE_INTEGER,
-            ..WorldState::default()
+            ..crate::scenario::fixed_world()
         };
         world.lighthouses[0].radius = world.radius_max;
         world.lighthouses[0].explored_radius = world.radius_max;

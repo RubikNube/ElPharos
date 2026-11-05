@@ -139,6 +139,7 @@ name = "el-pharos-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "rand",
  "serde",
  "serde_json",
  "tokio",

@@ -75,6 +75,13 @@ try:
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.2)
     pristine = Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text()
+    generated = json.loads(pristine)['world']
+    assert 6 <= len(generated['islands']) <= 12
+    assert len(generated['lighthouses']) == len(generated['islands'])
+    pristine = json.dumps({'save_version': 7, 'world': json.loads((Path(root) / 'tests/fixtures/fixed-world.json').read_text())})
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(pristine)
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.2)
     js("document.querySelector('.pause').click()")
     time.sleep(.2)
     specialization = '[aria-label="Lighthouse specialization"]'

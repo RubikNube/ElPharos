@@ -58,7 +58,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("world.json");
         assert!(load(&path).is_err());
-        let mut world = WorldState::default();
+        let mut world = crate::scenario::fixed_world();
         world.expand("beacon-1").unwrap();
         world.set_lighthouse_active("beacon-1", false).unwrap();
         save(&path, &world).unwrap();
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn validates_ids_references_geometry_and_exploration() {
-        let world = WorldState::default();
+        let world = crate::scenario::fixed_world();
         let mut bad = world.clone();
         bad.islands.push(bad.islands[0].clone());
         assert!(validate(&bad).is_err());
@@ -117,7 +117,7 @@ mod economy_tests {
     fn legacy_migration_and_economy_validation() {
         let path =
             std::env::temp_dir().join(format!("el-pharos-legacy-{}.json", std::process::id()));
-        let mut world = WorldState::default();
+        let mut world = crate::scenario::fixed_world();
         world.expand("beacon-1").unwrap();
         let mut legacy = serde_json::to_value(&world).unwrap();
         legacy.as_object_mut().unwrap().remove("economy");
@@ -188,7 +188,7 @@ mod facility_tests {
     fn facilities_roundtrip_legacy_three_and_invalid_states() {
         let path =
             std::env::temp_dir().join(format!("el-pharos-facilities-{}.json", std::process::id()));
-        let mut world = WorldState::default();
+        let mut world = crate::scenario::fixed_world();
         world.set_lighthouse_active("beacon-2", true).unwrap();
         world.restore_fuel_facility("island-2").unwrap();
         world.set_lighthouse_active("beacon-2", false).unwrap();
@@ -246,7 +246,7 @@ mod specialization_tests {
             "el-pharos-specialization-{}.json",
             std::process::id()
         ));
-        let mut world = WorldState::default();
+        let mut world = crate::scenario::fixed_world();
         world
             .specialize("beacon-1", crate::domain::Specialization::EfficientLamp)
             .unwrap();

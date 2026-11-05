@@ -147,7 +147,7 @@ mod tests {
     use serde_json::{Value, json};
 
     fn historical_save(version: u8) -> Value {
-        let mut world = WorldState::default();
+        let mut world = crate::scenario::fixed_world();
         if version <= 4 {
             world.islands.truncate(4);
             world.lighthouses.truncate(4);

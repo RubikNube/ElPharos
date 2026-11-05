@@ -1,0 +1,183 @@
+{
+  "research": {
+    "completed": []
+  },
+  "salvage": {
+    "reserve": 100,
+    "haven_timer": 0,
+    "yards": [
+      {
+        "island_id": "island-5",
+        "period": 4,
+        "restored": false,
+        "stock": 0,
+        "timer": 0,
+        "delivered": false
+      },
+      {
+        "island_id": "island-6",
+        "period": 2,
+        "restored": false,
+        "stock": 0,
+        "timer": 0,
+        "delivered": false
+      }
+    ],
+    "ships": []
+  },
+  "economy": {
+    "fuel": 300,
+    "capacity": 600,
+    "beacon_upkeep": 1,
+    "elapsed_seconds": 0,
+    "paused": false,
+    "blackout": false
+  },
+  "revision": 0,
+  "radius_step": 60,
+  "radius_max": 650,
+  "width": 2400,
+  "height": 1000,
+  "islands": [
+    {
+      "id": "island-1",
+      "name": "First Haven",
+      "position": {
+        "x": 800,
+        "y": 500
+      },
+      "radius": 110,
+      "fuel_facility": "haven"
+    },
+    {
+      "id": "island-2",
+      "name": "Amber Shoal",
+      "position": {
+        "x": 1250,
+        "y": 650
+      },
+      "radius": 90,
+      "fuel_facility": "ruined"
+    },
+    {
+      "id": "island-3",
+      "name": "Quiet Reach",
+      "position": {
+        "x": 1700,
+        "y": 450
+      },
+      "radius": 90,
+      "fuel_facility": "ruined"
+    },
+    {
+      "id": "island-4",
+      "name": "Last Anchorage",
+      "position": {
+        "x": 2150,
+        "y": 650
+      },
+      "radius": 90,
+      "fuel_facility": "ruined"
+    },
+    {
+      "id": "island-5",
+      "name": "Wreckers' Cove",
+      "position": {
+        "x": 900,
+        "y": 330
+      },
+      "radius": 65,
+      "fuel_facility": "none"
+    },
+    {
+      "id": "island-6",
+      "name": "Iron Shoal",
+      "position": {
+        "x": 1000,
+        "y": 680
+      },
+      "radius": 65,
+      "fuel_facility": "none"
+    }
+  ],
+  "lighthouses": [
+    {
+      "id": "beacon-1",
+      "island_id": "island-1",
+      "name": "First Light",
+      "position": {
+        "x": 800,
+        "y": 480
+      },
+      "radius": 290,
+      "active": true,
+      "explored_radius": 290,
+      "specialization": null
+    },
+    {
+      "id": "beacon-2",
+      "island_id": "island-2",
+      "name": "Amber Shoal Light",
+      "position": {
+        "x": 1250,
+        "y": 630
+      },
+      "radius": 290,
+      "active": false,
+      "explored_radius": 0,
+      "specialization": null
+    },
+    {
+      "id": "beacon-3",
+      "island_id": "island-3",
+      "name": "Quiet Reach Light",
+      "position": {
+        "x": 1700,
+        "y": 430
+      },
+      "radius": 290,
+      "active": false,
+      "explored_radius": 0,
+      "specialization": null
+    },
+    {
+      "id": "beacon-4",
+      "island_id": "island-4",
+      "name": "Last Anchorage Light",
+      "position": {
+        "x": 2150,
+        "y": 630
+      },
+      "radius": 290,
+      "active": false,
+      "explored_radius": 0,
+      "specialization": null
+    },
+    {
+      "id": "beacon-5",
+      "island_id": "island-5",
+      "name": "Wreckers' Cove Light",
+      "position": {
+        "x": 900,
+        "y": 310
+      },
+      "radius": 290,
+      "active": false,
+      "explored_radius": 0,
+      "specialization": null
+    },
+    {
+      "id": "beacon-6",
+      "island_id": "island-6",
+      "name": "Iron Shoal Light",
+      "position": {
+        "x": 1000,
+        "y": 660
+      },
+      "radius": 290,
+      "active": false,
+      "explored_radius": 0,
+      "specialization": null
+    }
+  ]
+}

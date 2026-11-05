@@ -7,7 +7,8 @@ use el_pharos_server::{
 };
 
 fn main() {
-    let initial = WorldState::default();
+    let initial: WorldState =
+        serde_json::from_str(include_str!("../../../tests/fixtures/fixed-world.json")).unwrap();
     let mut legacy = initial.clone();
     legacy.salvage = None;
     legacy.research = None;
@@ -48,7 +49,14 @@ fn main() {
         }
     }
     blackout.tick();
-    let worlds = [initial, legacy, researched, paused, blackout];
+    let worlds = [
+        initial,
+        legacy,
+        researched,
+        paused,
+        blackout,
+        WorldState::default(),
+    ];
     let mut messages = Vec::new();
     for world in &worlds {
         persistence::validate(world).unwrap();

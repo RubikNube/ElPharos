@@ -60,8 +60,8 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   const initial = await a.next();
   assert.equal(initial.type, 'world_snapshot');
   assert.equal(initial.protocol_version, 9);
-  assert.equal(initial.world.islands.length, 6);
-  assert.equal(initial.world.lighthouses.length, 6);
+  assert.ok(initial.world.islands.length >= 6 && initial.world.islands.length <= 12);
+  assert.equal(initial.world.lighthouses.length, initial.world.islands.length);
   assert.deepEqual(await b.next(), initial);
   const id = initial.world.lighthouses[0].id;
   a.socket.send('not json');
@@ -133,6 +133,15 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
     }
   }
   assert.deepEqual(await untilRadius(a, 470), await untilRadius(b, 470));
+
+  // Explicit geometry fixture keeps the restoration-boundary checks deterministic.
+  const fixedWorld = JSON.parse(await readFile(new URL('./fixtures/fixed-world.json', import.meta.url), 'utf8'));
+  fixedWorld.economy.paused = true;
+  fixedWorld.lighthouses[0].radius = 470;
+  fixedWorld.lighthouses[0].explored_radius = 470;
+  await writeFile(savePath, JSON.stringify({ save_version: 7, world: fixedWorld }));
+  assert.equal((await command('load_game', 'fixed-layout')).success, true);
+  await untilRadius(a, 470); await untilRadius(b, 470);
 
   // Discover Amber Shoal and restore concurrently: one charge and one mutation.
   a.socket.send(JSON.stringify({ type: 'restore_fuel_facility', protocol_version: 9, island_id: 'island-2' }));
@@ -331,6 +340,8 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal(fresh.economy.paused, false);
   assert.equal(fresh.economy.fuel, 300);
   assert.equal(fresh.objective_complete, false);
+  assert.ok(fresh.islands.length >= 6 && fresh.islands.length <= 12);
+  assert.notDeepEqual(fresh.islands.map(i => i.position), researchLoaded.islands.map(i => i.position));
   assert.deepEqual(fresh.research.completed, []);
   assert.deepEqual(await until(observer, w => w.revision >= fresh.revision), fresh);
   assert.equal(await readFile(savePath, 'utf8'), beforeRestartSave);

@@ -233,7 +233,7 @@ mod tests {
     use super::*;
     #[test]
     fn snapshots_include_derived_upkeep_and_cap_preview() {
-        let mut world = WorldState::default();
+        let mut world = crate::scenario::fixed_world();
         world
             .specialize("beacon-1", crate::domain::Specialization::EfficientLamp)
             .unwrap();
@@ -255,7 +255,7 @@ mod tests {
         let mut world = WorldState {
             salvage: None,
             research: None,
-            ..WorldState::default()
+            ..crate::scenario::fixed_world()
         };
         world.islands.truncate(4);
         world.lighthouses.truncate(4);

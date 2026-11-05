@@ -229,7 +229,7 @@ impl Drop for SessionGuard {
 mod simulation_tests {
     use super::*;
     fn state(now: Instant) -> Arc<GameService> {
-        let (world, _) = watch::channel(WorldState::default());
+        let (world, _) = watch::channel(crate::scenario::fixed_world());
         Arc::new(GameService {
             wake: Arc::new(Notify::new()),
             world,
@@ -317,13 +317,27 @@ mod simulation_tests {
         assert!(result.changed);
         assert_eq!(result.request_id.as_deref(), Some("restart"));
         assert!(observer.has_changed().unwrap());
-        let expected = WorldState {
-            revision: revision + 1,
-            ..WorldState::default()
-        };
-        assert_eq!(
-            serde_json::to_value(&*observer.borrow()).unwrap(),
-            serde_json::to_value(expected).unwrap()
+        let fresh = observer.borrow().clone();
+        crate::validation::validate(&fresh).unwrap();
+        assert_eq!(fresh.revision, revision + 1);
+        assert!((6..=12).contains(&fresh.islands.len()));
+        assert_eq!(fresh.economy.fuel, 300.0);
+        assert_eq!(fresh.economy.elapsed_seconds, 0);
+        assert!(!fresh.economy.paused);
+        assert_eq!(fresh.lighthouses.iter().filter(|l| l.active).count(), 1);
+        assert!(
+            fresh
+                .salvage
+                .as_ref()
+                .unwrap()
+                .yards
+                .iter()
+                .all(|y| !y.restored)
+        );
+        assert!(fresh.research.as_ref().unwrap().completed.is_empty());
+        assert_ne!(
+            serde_json::to_value(&fresh.islands).unwrap(),
+            serde_json::to_value(crate::scenario::fixed_world().islands).unwrap()
         );
         assert_eq!(std::fs::read(&s.save_path).unwrap(), saved);
         let restarted_at = s.gate.lock().unwrap().last_tick.unwrap();

@@ -47,17 +47,7 @@ impl Default for Salvage {
             reserve: STARTING_RESERVE,
             haven_timer: 0,
             ships: vec![],
-            yards: [("island-5", 4), ("island-6", 2)]
-                .into_iter()
-                .map(|(id, period)| Yard {
-                    island_id: id.into(),
-                    period,
-                    restored: false,
-                    stock: 0,
-                    timer: 0,
-                    delivered: false,
-                })
-                .collect(),
+            yards: vec![],
         }
     }
 }
@@ -288,16 +278,19 @@ pub fn validate(w: &WorldState) -> Result<(), String> {
     let Some(s) = &w.salvage else {
         return Ok(());
     };
-    if s.reserve > CAPACITY || s.haven_timer >= HAVEN_PERIOD || s.yards.len() != 2 {
+    if s.reserve > CAPACITY
+        || s.haven_timer >= HAVEN_PERIOD
+        || s.yards.is_empty()
+        || s.yards.len() > w.islands.len()
+    {
         return Err("Invalid Salvage reserve or yards".into());
     }
-    for (id, period) in [("island-5", 4), ("island-6", 2)] {
-        let y = s
-            .yards
-            .iter()
-            .find(|y| y.island_id == id)
-            .ok_or("Missing salvage yard")?;
-        if y.period != period
+    let mut yard_ids = std::collections::HashSet::new();
+    for y in &s.yards {
+        let id = y.island_id.as_str();
+        let period = y.period;
+        if !yard_ids.insert(id)
+            || !matches!(period, 2 | 4)
             || y.stock > LOCAL_CAPACITY
             || y.timer >= period
             || (!y.restored && (y.stock != 0 || y.delivered || y.timer != 0))
@@ -312,6 +305,12 @@ pub fn validate(w: &WorldState) -> Result<(), String> {
         if s.ships.iter().filter(|ship| ship.yard_id == id).count() != usize::from(y.restored) {
             return Err("Invalid yard fleet".into());
         }
+    }
+    if w.islands.iter().any(|island| {
+        island.fuel_facility == crate::domain::FuelFacility::None
+            && !yard_ids.contains(island.id.as_str())
+    }) {
+        return Err("Missing salvage yard".into());
     }
     if s.ships.len() != s.yards.iter().filter(|y| y.restored).count() {
         return Err("Invalid fleet".into());
@@ -338,14 +337,14 @@ pub fn validate(w: &WorldState) -> Result<(), String> {
 mod tests {
     use super::*;
     fn yard_world() -> WorldState {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         w.restore_salvage_yard("island-5").unwrap();
         w.set_lighthouse_active("beacon-5", true).unwrap();
         w
     }
     #[test]
     fn spending_is_atomic_and_haven_recovers() {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         for _ in 0..5 {
             w.expand("beacon-1").unwrap();
         }
@@ -462,7 +461,7 @@ mod tests {
     fn format_four_keeps_legacy_map_and_free_expansion_after_resaving() {
         let path =
             std::env::temp_dir().join(format!("salvage-legacy-four-{}.json", std::process::id()));
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         w.islands.truncate(4);
         w.lighthouses.truncate(4);
         let mut value = serde_json::to_value(&w).unwrap();
@@ -488,7 +487,7 @@ mod tests {
     #[test]
     fn fuel_first_and_salvage_first_are_completable() {
         for (salvage_first, researched) in [(false, false), (true, false), (false, true)] {
-            let mut w = WorldState::default();
+            let mut w = crate::scenario::fixed_world();
             if salvage_first {
                 w.restore_salvage_yard("island-5").unwrap();
                 w.set_lighthouse_active("beacon-5", true).unwrap();

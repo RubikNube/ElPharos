@@ -5,10 +5,16 @@ The [handover](El_Pharos_Project_Handover.md) is the project vision; the
 [implementation plan](docs/implementation-plan.md) records the original prototype
 scope. This README describes current behavior and compatibility.
 
-New games contain six islands, including two salvage yards with automatic cargo
-deliveries. See **Salvage and cargo expansion** below for the new economy.
-Older saves retain the original four-island scenario described in the following
-legacy gameplay sections. The playable archipelago is server-owned.
+New games randomly generate 6–12 islands with fuel facilities, salvage yards,
+and automatic cargo deliveries. Exactly one salvage island is visible from Haven
+at the start. Every island can be discovered, restored, and connected through
+successive lighthouse radius upgrades. A connected network at radius 470 is
+guaranteed to have sufficient restored fuel production without research or
+specializations. Islands have separated shorelines and the map fits the generated
+archipelago. Startup and Restart generate a fresh layout; loading preserves the
+saved map. See **Salvage and cargo expansion** below for the new economy.
+Existing saves retain their original layouts; formats 1–4 use the four-island
+scenario described in the following legacy gameplay sections. The playable archipelago is server-owned.
 Explore ancient island archives to unlock optional research upgrades.
 Select discovered beacons on the map or in the side panel, activate them, and
 expand their radii to reveal the next island. Connected tabs share the same
@@ -114,7 +120,7 @@ completion reflects the current network and play continues afterward.
 ```text
 apps/server/src/
   domain.rs                 World data, commands, and tick ordering
-  scenario.rs               Initial archipelago construction
+  scenario.rs               Seeded random archipelago generation and playability checks
   rules.rs / research.rs    Effective gameplay rules and archive progression
   network.rs / salvage.rs   Derived connectivity, routing, and cargo simulation
   service.rs                Serialized commands, clock, sessions, and save/load
@@ -177,8 +183,9 @@ validation, zoom bounds, cursor anchoring, connection
 backoff and disposal, scene cancellation and overlay updates, and ship motion
 under pause, blockage, and reduced-motion preferences. The contract check feeds
 actual Rust messages (new, legacy, researched, paused, and blackout worlds) into
-the frontend Zod schema. Rust tests cover revision-limit atomicity and migration
-of every supported save format.
+the frontend Zod schema. Rust tests cover revision-limit atomicity, migration
+of every supported save format, thousands of map-generation seeds, progressive
+exploration, sustainable completion, and generated-map save/load round trips.
 
 Browser smoke validation was also performed in headless Chromium: one canvas
 under StrictMode, active/inactive beacon rendering, dragging, wheel zoom, reset,
@@ -225,8 +232,11 @@ camera interaction, fuel display, shared pause, blackout recovery, StrictMode cl
 
 ## Salvage and cargo expansion
 
-New games now contain six islands. Wreckers' Cove and Iron Shoal offer competing
-salvage-yard investments; both are visible in the starting light. **Salvage** is
+New games contain 6–12 randomly placed islands, including at least three fuel
+islands and two salvage islands. Wreckers' Cove is visible in the starting light;
+Iron Shoal and any additional salvage yards require exploration. The three named
+fuel islands retain their research archives. Resource counts vary with map size
+while ensuring enough fuel for a sustainable completed network. **Salvage** is
 recovered metal used to reinforce towers and repair yard machinery. First Haven
 starts with 100 Salvage (capacity 300), and its salvage operation adds 1 every
 10 simulation seconds, including during blackouts. Radius expansions cost 20
@@ -234,9 +244,9 @@ Salvage in addition to their ongoing fuel upkeep. Existing fuel facilities still
 cost 120 fuel to restore.
 
 Restore a salvage yard for 120 fuel and 40 Salvage under connected illumination.
-Wreckers' Cove produces 1 Salvage every 4 seconds; farther Iron Shoal produces 1
-every 2 seconds. Yards operate only while their beacon is connected and hold up
-to 60 locally. Restoration includes an automatic ship carrying up to 20 Salvage
+Wreckers' Cove produces 1 Salvage every 4 seconds; Iron Shoal produces 1
+every 2 seconds. Additional yards use either production cycle. Yards operate only
+while their beacon is connected and hold up to 60 locally. Restoration includes an automatic ship carrying up to 20 Salvage
 to Haven at 60 world units/second, returning empty. Ships depart with any cargo
 available and follow the shortest safe path through the beacon network. Production
 at a full inventory is discarded. A ship retains cargo if Haven storage is full.
@@ -250,8 +260,8 @@ rings around discovered islands that it would newly reach. Gold ships carry
 cargo; pale blue ships are empty. Ships interpolate at most one tick beyond the
 latest server snapshot and respect pause and reduced-motion preferences.
 
-New objectives include restoring both yards and receiving a delivery from each,
-as well as restoring the three fuel facilities and connecting all six beacons
+New objectives include restoring every yard and receiving a delivery from each,
+as well as restoring every fuel facility and connecting all beacons
 with sustainable fuel. Production timers and cargo in transit are saved.
 Formats 1–4 retain their original map, free expansion, and objective under a
 legacy ruleset, which remains in effect after saving again. Current saves use

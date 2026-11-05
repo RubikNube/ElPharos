@@ -205,7 +205,7 @@ mod tests {
     use Technology::*;
 
     fn explored_world() -> WorldState {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         for n in 2..=4 {
             w.set_lighthouse_active(&format!("beacon-{n}"), true)
                 .unwrap();
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn discovery_uses_inclusive_remembered_island_centers() {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         assert!(!w.archive_discovered("island-2"));
         assert!(!w.archive_discovered("missing"));
         w.islands[1].position = crate::domain::Point { x: 1090., y: 480. };
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn purchases_check_discovery_prerequisites_and_funds_atomically() {
-        let mut w = WorldState::default();
+        let mut w = crate::scenario::fixed_world();
         let before = serde_json::to_value(&w).unwrap();
         assert_eq!(
             w.research_technology(ReinforcedFoundations),
