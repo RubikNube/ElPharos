@@ -160,3 +160,57 @@ Haven storage blocks unloading. Pause, disconnected-session suspension, and
 save/load use the existing simulation lifecycle. Domain playthrough tests cover
 both fuel-first and salvage-first strategies, recovery from spent construction
 reserves, interrupted deliveries, storage limits, and transit save/load.
+
+
+## Research tree milestone
+
+Implemented six permanent technologies in three independent archive branches:
+Amber Shoal has Reinforced foundations (40 Salvage, expansion 20→15) followed by
+Modular fittings (80, installation 40→30 and refit 20→15); Quiet Reach has
+Streamlined hulls (40, base speed 60→75) followed by Expanded holds (80, hold
+20→30); Last Anchorage has Precision lenses (40, efficient lamp saving 0.5→0.75)
+followed by Improved refining (80, connected restored fuel production 3→4).
+Haven stays at 2 fuel/s. Navigation multiplies researched speed by 1.5 to 112.5
+without stacking. Branches do not exclude one another, and research is optional
+for scenario completion.
+
+Archive discovery derives from an island center lying within the inclusive union
+of historically explored circles. No separate discovery counter is persisted.
+Purchases require discovery, the branch prerequisite, and shared Salvage; pause,
+blackout, and current connectivity do not block them. Rust serializes purchases
+under the existing gate; duplicate requests are no-ops, and rejected requests
+preserve state. Existing assets receive bonuses immediately, with new tick rates
+on the next tick and larger cargo holds on subsequent loading. Cargo rules are
+captured before Salvage is temporarily removed during a tick.
+
+`research.rs` owns the catalog, research purchases, validation, exploration checks,
+and effective rules. Server snapshots include authoritative costs, upkeep and
+upgrade previews, effective fuel production and restoration preview, and cargo
+speed/capacity. The client consumes these values for controls, animation, and ETA.
+A collapsible keyboard-accessible Research panel reveals discovered branches and
+explains prerequisites and blocked actions; the objective tracks archive and
+technology counts without requiring research to win.
+
+Wire protocol **9** adds `research_technology` with `technology_id` from the closed
+snake-case technology enum. Snapshots add `research: null` for legacy worlds, or
+`{ completed, catalog }` for Salvage worlds; catalog entries provide ID, name,
+archive island ID, prerequisite, cost, effect, discovery, availability, and blocking
+reason. Economy snapshots add `restored_facility_production` for restoration
+previews. Existing Salvage `rules` report effective values.
+
+Save format **7** persists only completed research IDs in `world.research`.
+Formats 1–6 migrate through the existing chain, then receive empty research if
+Salvage is enabled, or null otherwise. Remembered exploration reveals previously
+found archives. Current saves require the research field. Validation rejects
+unknown/duplicate IDs, missing prerequisites, undiscovered completed technologies,
+and mismatched rulesets; larger cargo loads require the upgraded hold.
+
+Verification includes unit tests for discovery boundaries, atomic purchases,
+pause/blackout behavior, all bonuses and their combinations, interrupted cargo,
+full storage, upgraded cargo persistence, migration, malformed saves, and researched
+and unresearched playthroughs. WebSocket tests cover shared purchases, duplicate
+and competing requests, malformed IDs, protocol mismatch, persistence, and failed
+loads preserving live state. Frontend tests cover research wire validation,
+branch visibility, availability, effective capacity/speed, and ETA. Browser smoke
+checks exercise expansion-driven archive discovery, keyboard purchases, effective
+costs, research save/load, and mobile overflow.

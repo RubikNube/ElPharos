@@ -67,3 +67,13 @@ button[aria-pressed="true"] { border-color: #ffd34d; }
 .objective { border: 1px solid #5c573d; background: #ffd34d08; padding: 14px; margin-bottom: 24px; }
 .objective h3 { color: #ffd34d; font-size: 15px; margin: 0 0 10px; }
 .objective p { color: #b5c3c7; font-size: 12px; line-height: 1.7; }
+
+.research { border: 1px solid #365063; padding: 12px; margin-bottom: 24px; }
+.research summary { cursor: pointer; color: #ffd34d; font-weight: 600; }
+.research summary:focus-visible { outline: 2px solid #ffd34d; outline-offset: 3px; }
+.archive { margin-top: 18px; }
+.archive h3 { font-size: 14px; color: #b5c3c7; }
+.technology { border-top: 1px solid #2b3d47; padding: 12px 0; }
+.technology h4 { margin: 0 0 8px; font-size: 13px; }
+.technology p { font-size: 12px; line-height: 1.6; color: #9aadb7; }
+.technology button { width: 100%; font-size: 12px; overflow-wrap: anywhere; }

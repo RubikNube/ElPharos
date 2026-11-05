@@ -9,6 +9,7 @@ New games contain six islands, including two salvage yards with automatic cargo
 deliveries. See **Salvage and cargo expansion** below for the new economy.
 Older saves retain the original four-island scenario described in the following
 legacy gameplay sections. The playable archipelago is server-owned.
+Explore ancient island archives to unlock optional research upgrades.
 Select discovered beacons on the map or in the side panel, activate them, and
 expand their radii to reveal the next island. Connected tabs share the same
 world. Exploration remains dimly visible after a beacon is extinguished.
@@ -262,6 +263,46 @@ loading, or capacity. Ships still use shortest-distance routes and stop on unsaf
 links; refitting affects their current leg on the next tick. The UI previews
 benefits and costs, and cargo animation and ETA reflect navigation bonuses.
 
-New saves use format **6** and preserve specializations. Formats 1–5 migrate
+The specialization milestone introduced format **6**, preserving specializations. Formats 1–5 migrate
 with empty slots; legacy games without Salvage keep their original rules and
-cannot buy specializations. Wire protocol **8** requires matching client and server.
+cannot buy specializations. Research now uses save format **7** and wire protocol **9**, as described below.
+
+
+## Research and ancient archives
+
+Explore the centers of **Amber Shoal**, **Quiet Reach**, and **Last Anchorage** to
+recover their archives. Discovery uses remembered exploration, so knowledge
+survives extinguished or disconnected beacons. Open **Research** below the
+objective panel to purchase permanent, shared upgrades with Salvage. Each branch
+has two technologies; its second requires its first. All three branches can be
+completed independently.
+
+| Archive | Technology | Salvage | Benefit |
+| --- | --- | ---: | --- |
+| Amber Shoal | Reinforced foundations | 40 | Radius expansion costs 15 instead of 20 Salvage. |
+| Amber Shoal | Modular fittings | 80 | Specialization installation costs 30 instead of 40; refitting costs 15 instead of 20. |
+| Quiet Reach | Streamlined hulls | 40 | Base cargo speed increases from 60 to 75 units/second. |
+| Quiet Reach | Expanded holds | 80 | Ship capacity increases from 20 to 30 Salvage. |
+| Last Anchorage | Precision lenses | 40 | Efficient lamps save 0.75 instead of 0.5 fuel/second. |
+| Last Anchorage | Improved refining | 80 | Connected restored fuel facilities produce 4 instead of 3 fuel/second. Haven remains at 2. |
+
+Purchases complete instantly and work while paused or during blackouts. They
+require discovery, prerequisites, and sufficient shared Salvage, without current
+illumination. Repeated purchases never charge twice. There are no research timers,
+refunds, resets, or additional resources. Research is optional; the existing
+archipelago objective remains sufficient to win, and research progress is shown
+separately.
+
+Upgrades apply to existing and future assets. Navigation's existing ×1.5 bonus
+combines with researched ship speed for **112.5 units/second**, without stacking
+multiple navigation beacons. Speed changes affect ships on their current leg on
+the next tick. Expanded holds affect subsequent loading and do not create extra
+cargo in ships already sailing. Fuel, costs, previews, cargo animation, and ETA
+all reflect effective server rules.
+
+New saves use **format 7**, persisting completed technology IDs alongside the
+existing world. Loading formats 5–6 adds empty research to Salvage worlds and
+reveals archives already covered by exploration. Formats 1–4 and resaved worlds
+without Salvage retain their legacy gameplay with no research. Matching clients
+and servers use **wire protocol 9**. These rules supersede earlier version and
+balance descriptions above where an upgrade applies.

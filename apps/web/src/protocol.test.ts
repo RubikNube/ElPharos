@@ -1,17 +1,18 @@
 import { expect, it } from 'vitest';
-import { serverMessageSchema, worldSchema } from './protocol';
+import { researchFixture, researchWorldFixture } from './research.fixture';
+import { cargoSpeed, serverMessageSchema, worldSchema } from './protocol';
 
 it('rejects incompatible protocol versions and invalid geometry', () => {
   expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 99, message: 'test' }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 8, world: {
-    salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: -1, height: 100, islands: [], lighthouses: [],
+  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 9, world: {
+    research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: -1, height: 100, islands: [], lighthouses: [],
   } }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 8, message: 'Unknown lighthouse' }).success).toBe(true);
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 9, message: 'Unknown lighthouse' }).success).toBe(true);
 });
 
 it('validates fuel and simulation state from the authoritative snapshot', () => {
-  const economy = { fuel: 300, capacity: 600, production: 2, facility_restore_cost: 120, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false };
-  const world = { economy, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: 100, height: 100, radius_step: 60, radius_max: 650, islands: [], lighthouses: [] };
+  const economy = { fuel: 300, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false };
+  const world = { economy, research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: 100, height: 100, radius_step: 60, radius_max: 650, islands: [], lighthouses: [] };
   expect(worldSchema.safeParse(world).success).toBe(true);
   for (const fuel of [0, 1.25, 42.5, 599.75, 600]) {
     expect(worldSchema.safeParse({ ...world, economy: { ...economy, fuel } }).success).toBe(true);
@@ -31,8 +32,8 @@ it('validates fuel and simulation state from the authoritative snapshot', () => 
 
 it('validates facility snapshots and variable production', () => {
   const world = {
-    economy: { fuel: 180, capacity: 600, production: 5, facility_restore_cost: 120, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false },
-    salvage: null, objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650,
+    economy: { fuel: 180, capacity: 600, production: 5, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false },
+    research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650,
     islands: [{ id: 'island-2', name: 'Amber Shoal', position: { x: 1250, y: 650 }, radius: 90, fuel_facility: 'restored', fuel_production: 3 }], lighthouses: [],
   };
   expect(worldSchema.safeParse(world).success).toBe(true);
@@ -47,7 +48,8 @@ it('validates facility snapshots and variable production', () => {
 
 it('validates authoritative cargo and Salvage rules', () => {
   const base = {
-    economy: { fuel: 180, capacity: 600, production: 2, facility_restore_cost: 120, beacon_upkeep: 1, elapsed_seconds: 1, paused: false, blackout: false },
+    research: researchFixture(),
+    economy: { fuel: 180, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 1, paused: false, blackout: false },
     objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650, islands: [], lighthouses: [],
   };
   const salvage = {
@@ -61,4 +63,43 @@ it('validates authoritative cargo and Salvage rules', () => {
   for (const cargo of [-1, 21, 1.5]) expect(worldSchema.safeParse({ ...base, salvage: { ...salvage, ships: [{ ...salvage.ships[0], cargo }] } }).success).toBe(false);
   expect(worldSchema.safeParse({ ...base, salvage: { ...salvage, ships: [{ ...salvage.ships[0], progress: 1 }] } }).success).toBe(false);
   expect(worldSchema.safeParse(base).success).toBe(false);
+});
+
+it('validates research catalog, prerequisites, discovery, and effective cargo capacity', () => {
+  const world = researchWorldFixture();
+  expect(worldSchema.safeParse(world).success).toBe(true);
+  expect(worldSchema.safeParse({ ...world, research: undefined }).success).toBe(false);
+  expect(worldSchema.safeParse({ ...world, research: null }).success).toBe(false);
+  expect(worldSchema.safeParse({ ...world, salvage: null }).success).toBe(false);
+  for (const completed of [['unknown'], ['reinforced_foundations', 'reinforced_foundations'], ['modular_fittings'], ['streamlined_hulls']]) {
+    expect(worldSchema.safeParse({ ...world, research: { ...world.research, completed } }).success).toBe(false);
+  }
+  const bad = researchFixture();
+  bad.catalog[1].available = true;
+  bad.catalog[1].blocked_reason = null;
+  expect(worldSchema.safeParse({ ...world, research: bad }).success).toBe(false);
+  world.research!.completed.push('reinforced_foundations');
+  world.research!.catalog[0].available = false;
+  world.research!.catalog[0].blocked_reason = 'Already researched';
+  world.salvage!.rules.expand_cost = 15;
+  world.salvage!.rules.hold = 30;
+  const ship = { yard_id: 'island-5', from: 'a', to: 'b', progress: 0.5, cargo: 30, returning: false, route: ['a', 'b'] };
+  world.salvage!.ships.push(ship);
+  expect(worldSchema.safeParse(world).success).toBe(true);
+  world.salvage!.rules.hold = 20;
+  expect(worldSchema.safeParse(world).success).toBe(false);
+  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 8, world }).success).toBe(false);
+});
+
+it('uses researched shipping speed with non-stacking navigation bonuses', () => {
+  const world = researchWorldFixture();
+  const light = { id: 'a', island_id: 'island-2', name: 'Light', position: { x: 0, y: 0 }, radius: 290, active: true, explored_radius: 290, specialization: null, connected: true, fuel_upkeep: 1, next_fuel_upkeep: 1.25 };
+  world.lighthouses = [light, { ...light, id: 'b', position: { x: 200, y: 0 } }];
+  expect(cargoSpeed(world, 'a', 'b')).toBe(60);
+  world.salvage!.rules.speed = 75;
+  expect(cargoSpeed(world, 'a', 'b')).toBe(75);
+  world.lighthouses[0].specialization = 'navigation_beacon';
+  expect(cargoSpeed(world, 'a', 'b')).toBe(112.5);
+  world.lighthouses[1].specialization = 'navigation_beacon';
+  expect(cargoSpeed(world, 'b', 'a')).toBe(112.5);
 });

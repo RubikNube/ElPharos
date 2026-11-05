@@ -35,30 +35,6 @@ impl Lighthouse {
     pub fn upkeep_at_radius(radius: f64) -> f64 {
         f64::from(BEACON_UPKEEP) + 0.25 * ((radius - 290.0).max(0.0) / 60.0).ceil()
     }
-
-    pub fn upkeep_for_radius(&self, radius: f64) -> f64 {
-        Self::upkeep_at_radius(radius)
-            - if self.specialization == Some(Specialization::EfficientLamp) {
-                EFFICIENCY_SAVING
-            } else {
-                0.0
-            }
-    }
-
-    pub fn link_speed(&self, other: &Self) -> f64 {
-        crate::salvage::SPEED
-            * if [self.specialization, other.specialization]
-                .contains(&Some(Specialization::NavigationBeacon))
-            {
-                NAVIGATION_MULTIPLIER
-            } else {
-                1.0
-            }
-    }
-
-    pub fn upkeep(&self) -> f64 {
-        self.upkeep_for_radius(self.radius)
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +96,7 @@ impl Default for Economy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
+    pub research: Option<crate::research::Research>,
     #[serde(default)]
     pub salvage: Option<crate::salvage::Salvage>,
     pub economy: Economy,
@@ -135,6 +112,7 @@ pub struct WorldState {
 impl Default for WorldState {
     fn default() -> Self {
         let mut world = Self {
+            research: Some(crate::research::Research::default()),
             salvage: Some(crate::salvage::Salvage::default()),
             economy: Economy::default(),
             revision: 0,
@@ -230,10 +208,11 @@ impl WorldState {
         if !self.is_network_illuminated(&light.position) {
             return Err("Connect illumination to fit a specialization");
         }
+        let rules = self.effective_rules();
         let cost = if light.specialization.is_some() {
-            REFIT_COST
+            rules.refit_cost
         } else {
-            SPECIALIZATION_COST
+            rules.specialization_cost
         };
         let salvage = self.salvage.as_mut().unwrap();
         if salvage.reserve < cost {
@@ -289,7 +268,7 @@ impl WorldState {
                     .enumerate()
                     .any(|(i, light)| light.island_id == island.id && connected[i])
                 {
-                    3
+                    self.restored_fuel_production()
                 } else {
                     0
                 }
@@ -389,7 +368,7 @@ impl WorldState {
         self.lighthouses
             .iter()
             .filter(|l| l.active)
-            .map(Lighthouse::upkeep)
+            .map(|light| self.lighthouse_upkeep_at_radius(light, light.radius))
             .sum()
     }
 
@@ -411,11 +390,12 @@ impl WorldState {
         if candidate.radius >= self.radius_max {
             return Ok(false);
         }
+        let expand_cost = self.effective_rules().expand_cost;
         if let Some(s) = &mut self.salvage {
-            if s.reserve < crate::salvage::EXPAND_COST {
+            if s.reserve < expand_cost {
                 return Err("Not enough Salvage to expand radius");
             }
-            s.reserve -= crate::salvage::EXPAND_COST;
+            s.reserve -= expand_cost;
         }
         let light = self
             .lighthouses
@@ -440,7 +420,11 @@ impl WorldState {
             .iter()
             .find(|l| l.id == id)
             .ok_or("Unknown lighthouse")?;
-        if active && !light.active && self.economy.fuel < self.upkeep() + light.upkeep() {
+        if active
+            && !light.active
+            && self.economy.fuel
+                < self.upkeep() + self.lighthouse_upkeep_at_radius(light, light.radius)
+        {
             return Err("Not enough fuel for one second of network upkeep");
         }
         let lighthouse = self
@@ -467,6 +451,7 @@ impl WorldState {
 fn legacy_world() -> WorldState {
     let mut w = WorldState {
         salvage: None,
+        research: None,
         ..WorldState::default()
     };
     w.islands.truncate(4);
@@ -843,8 +828,16 @@ mod specialization_tests {
                 < 1e-9
         );
         w.lighthouses[4].specialization = Some(Specialization::NavigationBeacon);
-        assert_eq!(w.lighthouses[0].link_speed(&w.lighthouses[4]), 90.);
-        assert_eq!(w.lighthouses[4].link_speed(&w.lighthouses[0]), 90.);
+        assert_eq!(
+            w.effective_rules()
+                .link_speed(&w.lighthouses[0], &w.lighthouses[4]),
+            90.
+        );
+        assert_eq!(
+            w.effective_rules()
+                .link_speed(&w.lighthouses[4], &w.lighthouses[0]),
+            90.
+        );
         let progress = w.salvage.as_ref().unwrap().ships[0].progress;
         w.set_lighthouse_active("beacon-5", false).unwrap();
         w.tick();

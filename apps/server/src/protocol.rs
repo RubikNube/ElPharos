@@ -1,11 +1,15 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 8;
+pub const VERSION: u8 = 9;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    ResearchTechnology {
+        protocol_version: u8,
+        technology_id: crate::research::Technology,
+    },
     SetLighthouseSpecialization {
         protocol_version: u8,
         lighthouse_id: String,
@@ -88,12 +92,13 @@ fn serialize_snapshot<S: serde::Serializer>(
         economy: &'a Economy,
         production: u32,
         facility_restore_cost: u32,
+        restored_facility_production: u32,
     }
     #[derive(Serialize)]
     struct Snapshot<'a> {
         economy: EconomySnapshot<'a>,
-        #[serde(serialize_with = "serialize_salvage")]
-        salvage: &'a Option<crate::salvage::Salvage>,
+        salvage: Option<SalvageSnapshot<'a>>,
+        research: Option<crate::research::Snapshot<'a>>,
         objective_complete: bool,
         shipping_links: Vec<ShippingLink<'a>>,
         revision: u64,
@@ -122,13 +127,18 @@ fn serialize_snapshot<S: serde::Serializer>(
         }
     }
     Snapshot {
-        salvage: &world.salvage,
+        salvage: world.salvage.as_ref().map(|data| SalvageSnapshot {
+            data,
+            rules: world.effective_rules(),
+        }),
+        research: world.research_snapshot(),
         objective_complete: world.objective_complete(),
         shipping_links,
         economy: EconomySnapshot {
             economy: &world.economy,
             production: world.production(),
             facility_restore_cost: FACILITY_RESTORE_COST,
+            restored_facility_production: world.restored_fuel_production(),
         },
         revision: world.revision,
         radius_step: world.radius_step,
@@ -150,9 +160,10 @@ fn serialize_snapshot<S: serde::Serializer>(
             .map(|(i, lighthouse)| Light {
                 connected: connected[i],
                 lighthouse,
-                fuel_upkeep: lighthouse.upkeep(),
+                fuel_upkeep: world.lighthouse_upkeep_at_radius(lighthouse, lighthouse.radius),
                 next_fuel_upkeep: (lighthouse.radius < world.radius_max).then(|| {
-                    lighthouse.upkeep_for_radius(
+                    world.lighthouse_upkeep_at_radius(
+                        lighthouse,
                         (lighthouse.radius + world.radius_step).min(world.radius_max),
                     )
                 }),
@@ -162,23 +173,11 @@ fn serialize_snapshot<S: serde::Serializer>(
     .serialize(serializer)
 }
 
-fn serialize_salvage<S: serde::Serializer>(
-    salvage: &Option<crate::salvage::Salvage>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    #[derive(Serialize)]
-    struct Snapshot<'a> {
-        #[serde(flatten)]
-        data: &'a crate::salvage::Salvage,
-        rules: crate::salvage::Rules,
-    }
-    salvage
-        .as_ref()
-        .map(|data| Snapshot {
-            data,
-            rules: crate::salvage::Rules::default(),
-        })
-        .serialize(serializer)
+#[derive(Serialize)]
+struct SalvageSnapshot<'a> {
+    #[serde(flatten)]
+    data: &'a crate::salvage::Salvage,
+    rules: crate::salvage::Rules,
 }
 
 #[cfg(test)]
@@ -207,6 +206,7 @@ mod tests {
     fn snapshots_derive_links_production_and_objective_without_persisting_them() {
         let mut world = WorldState {
             salvage: None,
+            research: None,
             ..WorldState::default()
         };
         world.islands.truncate(4);

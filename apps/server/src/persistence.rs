@@ -84,6 +84,7 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
             return Err("Invalid lighthouse or exploration".into());
         }
     }
+    crate::research::validate(world)?;
     crate::salvage::validate(world)?;
     Ok(())
 }
@@ -98,7 +99,7 @@ pub fn save(path: &Path, world: &WorldState) -> Result<(), String> {
     let temp = path.with_extension("json.tmp");
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let data = serde_json::to_vec_pretty(&Save {
-            save_version: 6,
+            save_version: 7,
             world: world.clone(),
         })?;
         let mut file = fs::File::create(&temp)?;
@@ -126,7 +127,7 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
     let legacy_version = value["save_version"]
         .as_u64()
         .ok_or("Invalid save version")?;
-    if !(1..=6).contains(&legacy_version) {
+    if !(1..=7).contains(&legacy_version) {
         return Err("Unsupported save version".into());
     }
     // Legacy saves have no economy; migration is restricted to version 1.
@@ -201,8 +202,22 @@ pub fn load(path: &Path) -> Result<WorldState, String> {
         }
         value["save_version"] = 6.into();
     }
+    if legacy_version <= 6 {
+        let research = if value["world"]["salvage"].is_null() {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!({"completed": []})
+        };
+        value["world"]
+            .as_object_mut()
+            .ok_or("Invalid world")?
+            .insert("research".into(), research);
+        value["save_version"] = 7.into();
+    } else if value["world"].get("research").is_none() {
+        return Err("Missing research state".into());
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
-    if save.save_version != 6 {
+    if save.save_version != 7 {
         return Err("Unsupported save version".into());
     }
     validate(&save.world)?;
@@ -306,7 +321,11 @@ mod economy_tests {
         .unwrap();
         let loaded = load(&path).unwrap();
         assert_eq!(loaded.economy.fuel, 42.0);
-        assert_eq!(loaded.lighthouses[0].upkeep(), 1.25);
+        assert_eq!(
+            loaded
+                .lighthouse_upkeep_at_radius(&loaded.lighthouses[0], loaded.lighthouses[0].radius),
+            1.25
+        );
         world.economy.fuel = 42.75;
         world.economy.paused = true;
         world.economy.elapsed_seconds = 90;
@@ -316,7 +335,7 @@ mod economy_tests {
             serde_json::to_value(&world).unwrap()
         );
         let written: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(written["save_version"], 6);
+        assert_eq!(written["save_version"], 7);
         assert!(
             written["world"]["lighthouses"][0]
                 .get("fuel_upkeep")

@@ -171,6 +171,7 @@ impl WorldState {
             .collect()
     }
     pub fn tick_salvage(&mut self) {
+        let rules = self.effective_rules();
         let Some(mut s) = self.salvage.take() else {
             return;
         };
@@ -243,7 +244,7 @@ impl WorldState {
                     ship.returning = false;
                 }
                 if ship.to == *home && !ship.returning && ship.cargo == 0 {
-                    ship.cargo = yard.stock.min(HOLD);
+                    ship.cargo = yard.stock.min(rules.hold);
                     yard.stock -= ship.cargo;
                     if ship.cargo == 0 {
                         continue;
@@ -275,7 +276,7 @@ impl WorldState {
                 continue;
             }
             ship.progress = (ship.progress
-                + self.lighthouses[a].link_speed(&self.lighthouses[b])
+                + rules.link_speed(&self.lighthouses[a], &self.lighthouses[b])
                     / distance(&self.lighthouses[a].position, &self.lighthouses[b].position))
             .min(1.0);
             if ship.progress >= 1.0 {
@@ -326,7 +327,7 @@ pub fn validate(w: &WorldState) -> Result<(), String> {
             || !exists(&ship.to)
             || !ship.progress.is_finite()
             || !(0.0..1.0).contains(&ship.progress)
-            || ship.cargo > HOLD
+            || ship.cargo > w.effective_rules().hold
             || ship.route.len() > w.lighthouses.len()
             || ship.route.iter().any(|id| !exists(id))
             || (ship.from == ship.to && ship.progress != 0.0)
@@ -340,18 +341,18 @@ pub fn validate(w: &WorldState) -> Result<(), String> {
 
 #[derive(Serialize)]
 pub struct Rules {
-    specialization_cost: u32,
-    refit_cost: u32,
-    efficiency_saving: f64,
-    navigation_multiplier: f64,
-    capacity: u32,
-    expand_cost: u32,
-    restore_cost: u32,
-    restore_fuel: f64,
-    speed: f64,
-    hold: u32,
-    local_capacity: u32,
-    haven_period: u32,
+    pub specialization_cost: u32,
+    pub refit_cost: u32,
+    pub efficiency_saving: f64,
+    pub navigation_multiplier: f64,
+    pub capacity: u32,
+    pub expand_cost: u32,
+    pub restore_cost: u32,
+    pub restore_fuel: f64,
+    pub speed: f64,
+    pub hold: u32,
+    pub local_capacity: u32,
+    pub haven_period: u32,
 }
 impl Default for Rules {
     fn default() -> Self {
@@ -369,6 +370,19 @@ impl Default for Rules {
             local_capacity: LOCAL_CAPACITY,
             haven_period: HAVEN_PERIOD,
         }
+    }
+}
+
+impl Rules {
+    pub fn link_speed(&self, a: &crate::domain::Lighthouse, b: &crate::domain::Lighthouse) -> f64 {
+        self.speed
+            * if [a.specialization, b.specialization]
+                .contains(&Some(crate::domain::Specialization::NavigationBeacon))
+            {
+                self.navigation_multiplier
+            } else {
+                1.0
+            }
     }
 }
 
@@ -525,7 +539,7 @@ mod tests {
 
     #[test]
     fn fuel_first_and_salvage_first_are_completable() {
-        for salvage_first in [false, true] {
+        for (salvage_first, researched) in [(false, false), (true, false), (false, true)] {
             let mut w = WorldState::default();
             if salvage_first {
                 w.restore_salvage_yard("island-5").unwrap();
@@ -535,10 +549,25 @@ mod tests {
             for i in 0..3 {
                 let id = format!("beacon-{}", i + 1);
                 for _ in 0..4 {
-                    while w.salvage.as_ref().unwrap().reserve < EXPAND_COST {
+                    while w.salvage.as_ref().unwrap().reserve < w.effective_rules().expand_cost {
                         w.tick();
                     }
                     w.expand(&id).unwrap();
+                }
+                if researched {
+                    let technologies = [
+                        crate::research::Technology::ReinforcedFoundations,
+                        crate::research::Technology::StreamlinedHulls,
+                        crate::research::Technology::PrecisionLenses,
+                    ];
+                    let technology = technologies[i];
+                    for _ in 0..2000 {
+                        if w.salvage.as_ref().unwrap().reserve >= technology.definition().cost {
+                            break;
+                        }
+                        w.tick();
+                    }
+                    w.research_technology(technology).unwrap();
                 }
                 let next = format!("beacon-{}", i + 2);
                 w.set_lighthouse_active(&next, true).unwrap();
@@ -565,6 +594,25 @@ mod tests {
                 w.objective_complete(),
                 "strategy salvage_first={salvage_first}"
             );
+            if researched {
+                for id in [
+                    crate::research::Technology::ModularFittings,
+                    crate::research::Technology::ExpandedHolds,
+                    crate::research::Technology::ImprovedRefining,
+                ] {
+                    for _ in 0..2000 {
+                        if w.salvage.as_ref().unwrap().reserve >= id.definition().cost {
+                            break;
+                        }
+                        w.tick();
+                    }
+                    w.research_technology(id).unwrap();
+                }
+                assert_eq!(w.research.as_ref().unwrap().completed.len(), 6);
+                assert!(w.objective_complete());
+            } else {
+                assert!(w.research.as_ref().unwrap().completed.is_empty());
+            }
             crate::persistence::validate(&w).unwrap();
         }
     }

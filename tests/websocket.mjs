@@ -36,25 +36,30 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   function client() {
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     const queue = [];
-    socket.addEventListener('message', (event) => queue.push(JSON.parse(event.data)));
+    const errors = [];
+    socket.addEventListener('message', (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'error') errors.push(message.message);
+      queue.push(message);
+    });
     t.after(() => socket.close());
     return {
-      socket,
+      socket, errors,
       async next() {
         for (let i = 0; i < 200; i++) { if (queue.length) return queue.shift(); await delay(20); }
         throw new Error('Timed out waiting for server message');
       },
-      command(id, active, version = 8) {
+      command(id, active, version = 9) {
         socket.send(JSON.stringify({ type: 'set_lighthouse_active', protocol_version: version, lighthouse_id: id, active }));
       },
     };
   }
   const a = client(), b = client();
   await a.next(); await b.next();
-  a.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 8, paused: true }));
+  a.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 9, paused: true }));
   const initial = await a.next();
   assert.equal(initial.type, 'world_snapshot');
-  assert.equal(initial.protocol_version, 8);
+  assert.equal(initial.protocol_version, 9);
   assert.equal(initial.world.islands.length, 6);
   assert.equal(initial.world.lighthouses.length, 6);
   assert.deepEqual(await b.next(), initial);
@@ -79,14 +84,14 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal((await a.next()).world.lighthouses[0].active, true);
   assert.equal((await b.next()).world.revision, changed.world.revision + 1);
   async function command(type, request_id) {
-    a.socket.send(JSON.stringify({ type, protocol_version: 8, request_id }));
+    a.socket.send(JSON.stringify({ type, protocol_version: 9, request_id }));
     let result;
     do { result = await a.next(); } while (result.type !== 'command_result');
     assert.equal(result.request_id, request_id);
     return result;
   }
   assert.equal((await command('load_game', 'missing')).success, false);
-  a.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 8, lighthouse_id: id }));
+  a.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 9, lighthouse_id: id }));
   const expanded = await a.next();
   assert.equal(expanded.world.lighthouses[0].radius, 350);
   assert.equal(expanded.world.lighthouses[0].fuel_upkeep, 1.25);
@@ -97,7 +102,7 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal((await command('save_game', 'save')).success, true);
   assert.deepEqual(await a.next(), expanded);
   const saved = await readFile(savePath, 'utf8');
-  assert.equal(JSON.parse(saved).save_version, 6);
+  assert.equal(JSON.parse(saved).save_version, 7);
   assert.equal(JSON.parse(saved).world.lighthouses[0].fuel_upkeep, undefined);
   a.command(id, false);
   const dark = await a.next();
@@ -120,7 +125,7 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal((await command('load_game', 'version')).success, false);
   await writeFile(savePath, saved);
   // Concurrent clients mutate under the same server gate without losing an upgrade.
-  for (const c of [a, b]) c.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 8, lighthouse_id: id }));
+  for (const c of [a, b]) c.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 9, lighthouse_id: id }));
   async function untilRadius(c, radius) {
     for (;;) {
       const message = await c.next();
@@ -130,14 +135,14 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.deepEqual(await untilRadius(a, 470), await untilRadius(b, 470));
 
   // Discover Amber Shoal and restore concurrently: one charge and one mutation.
-  a.socket.send(JSON.stringify({ type: 'restore_fuel_facility', protocol_version: 8, island_id: 'island-2' }));
+  a.socket.send(JSON.stringify({ type: 'restore_fuel_facility', protocol_version: 9, island_id: 'island-2' }));
   assert.equal((await a.next()).type, 'error'); // 470 radius does not illuminate its center.
-  a.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 8, lighthouse_id: id }));
+  a.socket.send(JSON.stringify({ type: 'expand_lighthouse_radius', protocol_version: 9, lighthouse_id: id }));
   const eligible = await untilRadius(a, 530);
   await untilRadius(b, 530);
   a.command('beacon-2', true);
   await a.next(); await b.next();
-  for (const c of [a, b]) c.socket.send(JSON.stringify({ type: 'restore_fuel_facility', protocol_version: 8, island_id: 'island-2' }));
+  for (const c of [a, b]) c.socket.send(JSON.stringify({ type: 'restore_fuel_facility', protocol_version: 9, island_id: 'island-2' }));
   async function untilProduction(c, production) {
     for (;;) {
       const message = await c.next();
@@ -180,7 +185,7 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.ok(port, logs);
   const restarted = client();
   assert.equal((await restarted.next()).world.lighthouses[0].radius, 290);
-  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 8, request_id: 'restart' }));
+  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 9, request_id: 'restart' }));
   assert.equal((await restarted.next()).success, true);
   const afterRestart = (await restarted.next()).world;
   assert.equal(afterRestart.lighthouses[0].radius, 530);
@@ -196,7 +201,7 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   }
   const observer = client();
   const baseline = (await observer.next()).world.economy.elapsed_seconds;
-  restarted.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 8, paused: false }));
+  restarted.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 9, paused: false }));
   await until(restarted, w => !w.economy.paused);
   const tick = await until(restarted, w => w.economy.elapsed_seconds > baseline);
   const otherTick = await until(observer, w => w.economy.elapsed_seconds === tick.economy.elapsed_seconds);
@@ -204,7 +209,7 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal(tick.lighthouses[0].fuel_upkeep, 2);
   const savedFuel = JSON.parse(facilitySaved).world.economy.fuel;
   assert.equal(tick.economy.fuel, savedFuel + (tick.economy.elapsed_seconds - baseline) * 2);
-  observer.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 8, paused: true }));
+  observer.socket.send(JSON.stringify({ type: 'set_simulation_paused', protocol_version: 9, paused: true }));
   const paused = await until(restarted, w => w.economy.paused);
   await delay(1200);
   const verification = client();
@@ -215,10 +220,10 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   cargoFixture.world.salvage.reserve = 100;
   cargoFixture.world.economy.fuel = 300;
   await writeFile(savePath, JSON.stringify(cargoFixture));
-  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 8, request_id: 'cargo-fixture' }));
+  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 9, request_id: 'cargo-fixture' }));
   await until(restarted, w => w.salvage.reserve === 100);
   await until(observer, w => w.salvage.reserve === 100);
-  for (const c of [restarted, observer]) c.socket.send(JSON.stringify({ type: 'restore_salvage_yard', protocol_version: 8, island_id: 'island-5' }));
+  for (const c of [restarted, observer]) c.socket.send(JSON.stringify({ type: 'restore_salvage_yard', protocol_version: 9, island_id: 'island-5' }));
   const yardRestored = await until(restarted, w => w.salvage.ships.length === 1);
   const broadcast = await until(observer, w => w.salvage.ships.length === 1);
   assert.deepEqual(yardRestored, broadcast);
@@ -228,7 +233,7 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal(yardRestored.salvage.rules.expand_cost, 20);
 
   for (const c of [restarted, observer]) c.socket.send(JSON.stringify({
-    type: 'set_lighthouse_specialization', protocol_version: 8,
+    type: 'set_lighthouse_specialization', protocol_version: 9,
     lighthouse_id: 'beacon-1', specialization: 'efficient_lamp',
   }));
   const specialized = await until(restarted, w => w.lighthouses[0].specialization === 'efficient_lamp');
@@ -236,11 +241,77 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   assert.equal(specialized.salvage.reserve, 20);
   assert.equal(specialized.lighthouses[0].fuel_upkeep, yardRestored.lighthouses[0].fuel_upkeep - 0.5);
   restarted.socket.send(JSON.stringify({
-    type: 'set_lighthouse_specialization', protocol_version: 8,
+    type: 'set_lighthouse_specialization', protocol_version: 9,
     lighthouse_id: 'beacon-1', specialization: 'navigation_beacon',
   }));
   const refitted = await until(restarted, w => w.lighthouses[0].specialization === 'navigation_beacon');
   assert.equal(refitted.salvage.reserve, 0);
   assert.equal(refitted.lighthouses[0].fuel_upkeep, yardRestored.lighthouses[0].fuel_upkeep);
+
+  // Research uses remembered exploration, and concurrent duplicate purchases charge once.
+  const researchFixture = JSON.parse(facilitySaved);
+  researchFixture.world.salvage.reserve = 40;
+  researchFixture.world.economy.paused = true;
+  researchFixture.world.economy.blackout = false;
+  for (const light of researchFixture.world.lighthouses) {
+    light.active = false;
+    light.explored_radius = light.radius;
+  }
+  await writeFile(savePath, JSON.stringify(researchFixture));
+  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 9, request_id: 'research-fixture' }));
+  const researchBaseline = await until(restarted, w => w.salvage.reserve === 40 && w.lighthouses.every(l => !l.active));
+  await until(observer, w => w.revision === researchBaseline.revision);
+  assert.equal(researchBaseline.research.catalog.filter(t => t.discovered).length, 6);
+  for (const c of [restarted, observer]) c.socket.send(JSON.stringify({
+    type: 'research_technology', protocol_version: 9, technology_id: 'reinforced_foundations',
+  }));
+  const researched = await until(restarted, w => w.research.completed.length === 1);
+  assert.deepEqual(await until(observer, w => w.research.completed.length === 1), researched);
+  assert.equal(researched.salvage.reserve, 0);
+  assert.equal(researched.salvage.rules.expand_cost, 15);
+  assert.equal(researched.revision, researchBaseline.revision + 1);
+  const duplicateObserver = client();
+  const duplicateState = (await duplicateObserver.next()).world;
+  assert.deepEqual(duplicateState, researched);
+  duplicateObserver.socket.close();
+
+  // Independent purchases compete for a single shared reserve.
+  await writeFile(savePath, JSON.stringify(researchFixture));
+  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 9, request_id: 'research-race' }));
+  const raceBaseline = await until(restarted, w => w.research.completed.length === 0 && w.salvage.reserve === 40);
+  await until(observer, w => w.revision === raceBaseline.revision);
+  restarted.socket.send(JSON.stringify({ type: 'research_technology', protocol_version: 9, technology_id: 'streamlined_hulls' }));
+  observer.socket.send(JSON.stringify({ type: 'research_technology', protocol_version: 9, technology_id: 'precision_lenses' }));
+  const winner = await until(restarted, w => w.research.completed.length === 1);
+  assert.deepEqual(await until(observer, w => w.research.completed.length === 1), winner);
+  assert.equal(winner.salvage.reserve, 0);
+  assert.equal(winner.revision, raceBaseline.revision + 1);
+  const failedClient = winner.research.completed[0] === 'streamlined_hulls' ? observer : restarted;
+  for (let i = 0; i < 100 && !failedClient.errors.includes('Not enough Salvage for research'); i++) await delay(20);
+  assert.ok(failedClient.errors.includes('Not enough Salvage for research'));
+
+  // Malformed IDs and protocol mismatches cannot mutate research.
+  restarted.socket.send(JSON.stringify({ type: 'research_technology', protocol_version: 9, technology_id: 'unknown' }));
+  for (;;) { const msg = await restarted.next(); if (msg.type === 'error' && msg.message === 'Invalid command') break; }
+  restarted.socket.send(JSON.stringify({ type: 'research_technology', protocol_version: 8, technology_id: 'reinforced_foundations' }));
+  assert.equal((await restarted.next()).message, 'Unsupported protocol version');
+  restarted.socket.send(JSON.stringify({ type: 'save_game', protocol_version: 9, request_id: 'research-save' }));
+  for (;;) { const msg = await restarted.next(); if (msg.type === 'command_result') { assert.equal(msg.success, true); break; } }
+  const researchSaved = JSON.parse(await readFile(savePath, 'utf8'));
+  assert.equal(researchSaved.save_version, 7);
+  assert.deepEqual(researchSaved.world.research.completed, winner.research.completed);
+  assert.equal(researchSaved.world.research.catalog, undefined);
+  const invalidResearch = structuredClone(researchSaved);
+  invalidResearch.world.research.completed = ['expanded_holds'];
+  await writeFile(savePath, JSON.stringify(invalidResearch));
+  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 9, request_id: 'invalid-research' }));
+  for (;;) { const msg = await restarted.next(); if (msg.type === 'command_result') { assert.equal(msg.success, false); break; } }
+  const unchangedClient = client();
+  assert.deepEqual((await unchangedClient.next()).world, winner);
+  unchangedClient.socket.close();
+  await writeFile(savePath, JSON.stringify(researchSaved));
+  restarted.socket.send(JSON.stringify({ type: 'load_game', protocol_version: 9, request_id: 'research-load' }));
+  const researchLoaded = await until(restarted, w => w.revision > winner.revision);
+  assert.deepEqual(researchLoaded.research, winner.research);
 
 });
