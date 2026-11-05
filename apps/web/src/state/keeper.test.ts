@@ -4,7 +4,7 @@ import { keeperIdentity, keeperMood, keeperName, pickRemark, remarks, type Light
 
 const light: Lighthouse = {
   id: 'beacon-1', island_id: 'island-1', name: 'First Light', position: { x: 100, y: 100 },
-  active: true, connected: true, radius: 290, explored_radius: 290,
+  active: true, connected: true, radius: 290, effective_radius: 290, sick: false, immune_until: 300, explored_radius: 290,
   specialization: null, fuel_upkeep: 1.25, next_fuel_upkeep: 1.5,
 };
 
@@ -38,11 +38,18 @@ it('prioritizes darkness, blackout and low fuel over isolation, with an exact te
 });
 
 it('offers varied mood-specific remarks and excludes the previous sentence', () => {
-  for (const mood of ['Worried', 'Lonely', 'Cheerful'] as const) {
+  for (const mood of ['Sick', 'Worried', 'Lonely', 'Cheerful'] as const) {
     expect(remarks[mood].length).toBeGreaterThanOrEqual(4);
     const first = pickRemark(mood, undefined, () => 0);
     expect(remarks[mood]).toContain(first);
     expect(pickRemark(mood, first, () => 0)).not.toBe(first);
     expect(pickRemark(mood, undefined, () => 0.99)).not.toBe(first);
   }
+});
+
+it('prioritizes sickness over darkness, low fuel and isolation', () => {
+  const world = researchWorldFixture();
+  world.economy.blackout = true;
+  world.economy.fuel = 0;
+  expect(keeperMood(world, { ...light, active: false, connected: false, sick: true })).toBe('Sick');
 });

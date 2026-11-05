@@ -2,6 +2,7 @@ import { PROTOCOL_VERSION, type ClientMessage, type TechnologyId } from '../prot
 
 export function worldCommands(send: (message: ClientMessage) => void) {
   return {
+    sendDoctor: (lighthouse_id: string) => send({ type: 'send_doctor', protocol_version: PROTOCOL_VERSION, lighthouse_id }),
     buildSalvageVessel: () => send({ type: 'build_salvage_vessel', protocol_version: PROTOCOL_VERSION }),
     setSalvageVesselEnabled: (enabled: boolean) => send({ type: 'set_salvage_vessel_enabled', protocol_version: PROTOCOL_VERSION, enabled }),
     research: (technology_id: TechnologyId) => send({ type: 'research_technology', protocol_version: PROTOCOL_VERSION, technology_id }),

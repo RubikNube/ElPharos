@@ -491,6 +491,10 @@ mod tests {
     fn fuel_first_and_salvage_first_are_completable() {
         for (salvage_first, researched) in [(false, false), (true, false), (false, true)] {
             let mut w = crate::scenario::fixed_world();
+            // This strategy test isolates the economy from random illness.
+            for light in &mut w.lighthouses {
+                light.immune_until = crate::domain::MAX_SAFE_INTEGER;
+            }
             if salvage_first {
                 w.restore_salvage_yard("island-5").unwrap();
                 w.set_lighthouse_active("beacon-5", true).unwrap();

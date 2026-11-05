@@ -88,3 +88,36 @@ it('interpolates expedition travel with one-tick limits and respects pause and r
   expect(position).toHaveBeenLastCalledWith(0, 0);
   animator.dispose();
 });
+
+it('animates the doctor through darkness and freezes on pause or reduced motion', () => {
+  let now = 0;
+  let frame: FrameRequestCallback = () => {};
+  const media = Object.assign(new EventTarget(), { matches: false });
+  vi.stubGlobal('window', { matchMedia: () => media });
+  vi.stubGlobal('performance', { now: () => now });
+  vi.stubGlobal('requestAnimationFrame', vi.fn((next: FrameRequestCallback) => { frame = next; return 1; }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const position = vi.fn();
+  const doctor = { destination: 'patient', returning: false, progress: 0.25 };
+  const ship = { graphic: { position: { set: position }, rotation: 0 }, from: { x: 0, y: 0 }, to: { x: 240, y: 0 }, offset: 0, doctor } as unknown as RenderShip;
+  const world = researchWorldFixture();
+  world.economy.blackout = true;
+  const animator = createShipAnimator(vi.fn());
+  animator.update(world, [ship]);
+  expect(position).toHaveBeenLastCalledWith(60, 0);
+  now = 500; frame(now);
+  expect(position).toHaveBeenLastCalledWith(120, 0);
+  now = 5000; frame(now);
+  expect(position).toHaveBeenLastCalledWith(180, 0);
+  world.economy.paused = true;
+  animator.update(world, [ship]);
+  expect(position).toHaveBeenLastCalledWith(60, 0);
+  doctor.returning = true;
+  animator.update(world, [ship]);
+  expect(position).toHaveBeenLastCalledWith(180, 0);
+  world.economy.paused = false;
+  media.matches = true;
+  media.dispatchEvent(new Event('change'));
+  expect(position).toHaveBeenLastCalledWith(180, 0);
+  animator.dispose();
+});

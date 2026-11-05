@@ -113,7 +113,9 @@
       "radius": 290,
       "active": true,
       "explored_radius": 290,
-      "specialization": null
+      "specialization": null,
+      "sick": false,
+      "immune_until": 300
     },
     {
       "id": "beacon-2",
@@ -126,7 +128,9 @@
       "radius": 290,
       "active": false,
       "explored_radius": 0,
-      "specialization": null
+      "specialization": null,
+      "sick": false,
+      "immune_until": 300
     },
     {
       "id": "beacon-3",
@@ -139,7 +143,9 @@
       "radius": 290,
       "active": false,
       "explored_radius": 0,
-      "specialization": null
+      "specialization": null,
+      "sick": false,
+      "immune_until": 300
     },
     {
       "id": "beacon-4",
@@ -152,7 +158,9 @@
       "radius": 290,
       "active": false,
       "explored_radius": 0,
-      "specialization": null
+      "specialization": null,
+      "sick": false,
+      "immune_until": 300
     },
     {
       "id": "beacon-5",
@@ -165,7 +173,9 @@
       "radius": 290,
       "active": false,
       "explored_radius": 0,
-      "specialization": null
+      "specialization": null,
+      "sick": false,
+      "immune_until": 300
     },
     {
       "id": "beacon-6",
@@ -178,7 +188,10 @@
       "radius": 290,
       "active": false,
       "explored_radius": 0,
-      "specialization": null
+      "specialization": null,
+      "sick": false,
+      "immune_until": 300
     }
-  ]
+  ],
+  "doctor": null
 }

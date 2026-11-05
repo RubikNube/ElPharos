@@ -4,21 +4,21 @@ import { researchFixture, researchWorldFixture } from './research.fixture';
 import { serverMessageSchema, worldSchema } from './protocol';
 
 it('rejects incompatible protocol versions and invalid geometry', () => {
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 109, message: 'test' }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 10, world: {
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 119, message: 'test' }).success).toBe(false);
+  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 11, world: {
     research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: -1, height: 100, islands: [], lighthouses: [],
   } }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 10, message: 'Unknown lighthouse' }).success).toBe(true);
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 11, message: 'Unknown lighthouse' }).success).toBe(true);
 });
 
 it('validates fuel and simulation state from the authoritative snapshot', () => {
   const economy = { fuel: 300, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false };
-  const world = { economy, research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: 100, height: 100, radius_step: 60, radius_max: 650, islands: [], lighthouses: [] };
+  const world = { doctor: null, doctor_rules: { trip_fuel: 40, speed: 120 }, economy, research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: 100, height: 100, radius_step: 60, radius_max: 650, islands: [], lighthouses: [] };
   expect(worldSchema.safeParse(world).success).toBe(true);
   for (const fuel of [0, 1.25, 42.5, 599.75, 600]) {
     expect(worldSchema.safeParse({ ...world, economy: { ...economy, fuel } }).success).toBe(true);
   }
-  const light = { specialization: null, connected: true, id: 'a', island_id: 'i', name: 'Beacon', position: { x: 10, y: 10 }, radius: 350, explored_radius: 350, active: true, fuel_upkeep: 1.25, next_fuel_upkeep: 1.5 };
+  const light = { specialization: null, connected: true, id: 'a', island_id: 'i', name: 'Beacon', position: { x: 10, y: 10 }, radius: 350, effective_radius: 350, sick: false, immune_until: 300, explored_radius: 350, active: true, fuel_upkeep: 1.25, next_fuel_upkeep: 1.5 };
   expect(worldSchema.safeParse({ ...world, lighthouses: [light] }).success).toBe(true);
   expect(worldSchema.safeParse({ ...world, lighthouses: [{ ...light, next_fuel_upkeep: null }] }).success).toBe(true);
   for (const fuel_upkeep of [undefined, 0, 1.1, 3]) {
@@ -32,7 +32,7 @@ it('validates fuel and simulation state from the authoritative snapshot', () => 
 });
 
 it('validates facility snapshots and variable production', () => {
-  const world = {
+  const world = { doctor: null, doctor_rules: { trip_fuel: 40, speed: 120 },
     economy: { fuel: 180, capacity: 600, production: 5, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false },
     research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650,
     islands: [{ id: 'island-2', name: 'Amber Shoal', position: { x: 1250, y: 650 }, radius: 90, fuel_facility: 'restored', fuel_production: 3 }], lighthouses: [],
@@ -48,7 +48,7 @@ it('validates facility snapshots and variable production', () => {
 });
 
 it('validates authoritative cargo and Salvage rules', () => {
-  const base = {
+  const base = { doctor: null, doctor_rules: { trip_fuel: 40, speed: 120 },
     research: researchFixture(),
     economy: { fuel: 180, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 1, paused: false, blackout: false },
     objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650, islands: [], lighthouses: [],
@@ -95,7 +95,7 @@ it('validates research catalog, prerequisites, discovery, and effective cargo ca
 
 it('uses researched shipping speed with non-stacking navigation bonuses', () => {
   const world = researchWorldFixture();
-  const light = { id: 'a', island_id: 'island-2', name: 'Light', position: { x: 0, y: 0 }, radius: 290, active: true, explored_radius: 290, specialization: null, connected: true, fuel_upkeep: 1, next_fuel_upkeep: 1.25 };
+  const light = { id: 'a', island_id: 'island-2', name: 'Light', position: { x: 0, y: 0 }, radius: 290, effective_radius: 290, sick: false, immune_until: 300, active: true, explored_radius: 290, specialization: null, connected: true, fuel_upkeep: 1, next_fuel_upkeep: 1.25 };
   world.lighthouses = [light, { ...light, id: 'b', position: { x: 200, y: 0 } }];
   expect(cargoSpeed(world, 'a', 'b')).toBe(60);
   world.salvage!.rules.speed = 75;

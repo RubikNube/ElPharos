@@ -55,6 +55,15 @@ fn main() {
         }
     }
     blackout.tick();
+    let mut sick = initial.clone();
+    sick.lighthouses[1].active = true;
+    sick.lighthouses[1].explored_radius = sick.lighthouses[1].radius;
+    sick.lighthouses[1].sick = true;
+    sick.send_doctor("beacon-2").unwrap();
+    let mut returning = sick.clone();
+    returning.lighthouses[1].sick = false;
+    returning.lighthouses[1].immune_until = 600;
+    returning.doctor.as_mut().unwrap().returning = true;
     let worlds = [
         initial,
         legacy,
@@ -62,6 +71,8 @@ fn main() {
         paused,
         blackout,
         WorldState::default(),
+        sick,
+        returning,
     ];
     let mut messages = Vec::new();
     for world in &worlds {

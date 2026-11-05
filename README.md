@@ -99,9 +99,9 @@ automatically. The side panel shows fuel, rates, pause status, and shortage feed
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
 preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
-New saves use format 8 and persist facilities, Salvage, specializations, salvage vessels, and
-research rather than derived production. Save formats 1–7 remain supported.
-Wire protocol 10 requires matching client and server versions.
+New saves use format 9 and persist keeper health, doctor voyages, facilities, Salvage, specializations, salvage vessels, and
+research rather than derived production. Save formats 1–8 remain supported.
+Wire protocol 11 requires matching client and server versions.
 
 ## Connected shipping and scenario goal
 
@@ -269,7 +269,7 @@ as well as restoring every fuel facility and connecting all beacons
 with sustainable fuel. Production timers and cargo in transit are saved.
 Formats 1–4 retain their original map, free expansion, and objective under a
 legacy ruleset, which remains in effect after saving again. Current saves use
-format 8 and matching clients and servers use wire protocol 10. The older sections
+format 9 and matching clients and servers use wire protocol 11. The older sections
 above describe the original four-island scenario; these rules supersede them for
 new games. Base Salvage constants live in `apps/server/src/salvage.rs`;
 `apps/server/src/rules.rs` collects effective rules for simulation and snapshots.
@@ -349,11 +349,30 @@ the next tick. Expanded holds affect subsequent loading and do not create extra
 cargo in ships already sailing. Fuel, costs, previews, cargo animation, and ETA
 all reflect effective server rules.
 
-New saves use **format 8**, persisting completed technology IDs alongside the
+New saves use **format 9**, persisting keeper health and doctor voyages alongside completed technology IDs and the
 existing world. Loading formats 5–6 adds empty research to Salvage worlds and
 reveals archives already covered by exploration. Formats 1–4 and resaved worlds
 without Salvage retain their legacy gameplay with no research. Matching clients
-and servers use **wire protocol 10**. These rules supersede earlier version and
+and servers use **wire protocol 11**. These rules supersede earlier version and
 balance descriptions above where an upgrade applies.
 
 Use **Restart** beside Save and Load to start a fresh shared game. Confirming resets progress for every connected tab and keeps the existing save slot. When all scenario objectives are met, a victory notification appears. Choose **Continue playing** to dismiss it and keep managing the archipelago; the simulation continues after victory.
+
+
+## Keeper sickness and doctor visits
+
+Previously lit keepers have a 5% chance of sickness each simulation minute after
+five minutes of initial safety. Sickness reduces effective light range by 25%,
+which can disconnect production and shipping. Discovered terrain and range
+upgrades are retained, and fuel upkeep stays based on normal range.
+
+Select a sick keeper and choose **Send doctor — 40 fuel**. One shared doctor ship
+travels from First Haven at 120 world units/second, treats the keeper on arrival,
+and returns before another dispatch. The fare covers both legs. It can reach
+isolated lighthouses and operates through blackouts without revealing terrain.
+First Haven receives immediate local treatment for the same fare. Treatment
+restores full range and grants five minutes of immunity. Illness and voyages
+advance only with simulation time; saves preserve their state.
+
+Keeper health introduces **save format 9** and **wire protocol 11**. Older saves
+load with healthy keepers, five minutes of immunity, and an idle doctor ship.

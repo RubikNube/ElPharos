@@ -22,6 +22,8 @@ pub enum Specialization {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lighthouse {
+    pub sick: bool,
+    pub immune_until: u64,
     #[serde(default)]
     pub specialization: Option<Specialization>,
     pub id: String,
@@ -34,6 +36,10 @@ pub struct Lighthouse {
 }
 
 impl Lighthouse {
+    pub fn effective_radius(&self) -> f64 {
+        self.radius * if self.sick { 0.75 } else { 1.0 }
+    }
+
     pub fn upkeep_at_radius(radius: f64) -> f64 {
         f64::from(BEACON_UPKEEP) + 0.25 * ((radius - 290.0).max(0.0) / 60.0).ceil()
     }
@@ -98,6 +104,7 @@ impl Default for Economy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
+    pub doctor: Option<crate::health::DoctorVoyage>,
     pub research: Option<crate::research::Research>,
     #[serde(default)]
     pub salvage: Option<crate::salvage::Salvage>,
@@ -167,7 +174,8 @@ impl WorldState {
     }
 
     pub fn overlap(a: &Lighthouse, b: &Lighthouse) -> bool {
-        (a.position.x - b.position.x).hypot(a.position.y - b.position.y) <= a.radius + b.radius
+        (a.position.x - b.position.x).hypot(a.position.y - b.position.y)
+            <= a.effective_radius() + b.effective_radius()
     }
 
     pub fn facility_production(&self, island: &Island, connected: &[bool]) -> u32 {
@@ -224,7 +232,7 @@ impl WorldState {
         self.lighthouses.iter().any(|light| {
             light.active
                 && (position.x - light.position.x).hypot(position.y - light.position.y)
-                    <= light.radius
+                    <= light.effective_radius()
         })
     }
 
@@ -260,6 +268,7 @@ impl WorldState {
         let Ok(revision) = self.next_revision() else {
             return false;
         };
+        self.tick_health(rand::random);
         let production = self.production();
         let upkeep = self.upkeep();
         let e = &mut self.economy;
@@ -327,7 +336,7 @@ impl WorldState {
             .ok_or("Unknown lighthouse")?;
         light.radius = radius;
         if light.active {
-            light.explored_radius = light.explored_radius.max(radius);
+            light.explored_radius = light.explored_radius.max(light.effective_radius());
         }
         self.revision = revision;
         Ok(true)
@@ -364,7 +373,9 @@ impl WorldState {
             self.economy.blackout = false;
         }
         if active {
-            lighthouse.explored_radius = lighthouse.explored_radius.max(lighthouse.radius);
+            lighthouse.explored_radius = lighthouse
+                .explored_radius
+                .max(lighthouse.effective_radius());
         }
         self.revision = revision;
         Ok(true)

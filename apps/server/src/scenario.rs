@@ -83,6 +83,7 @@ fn generate(rng: &mut StdRng, count: usize, jitter: f64) -> WorldState {
         point.y += 310.0 - min_y;
     }
     let mut world = WorldState {
+        doctor: None,
         research: Some(crate::research::Research::default()),
         salvage: Some(crate::salvage::Salvage::default()),
         economy: Economy::default(),
@@ -131,6 +132,8 @@ fn generate(rng: &mut StdRng, count: usize, jitter: f64) -> WorldState {
             },
         };
         world.lighthouses.push(Lighthouse {
+            sick: false,
+            immune_until: 300,
             specialization: None,
             id: format!("beacon-{n}"),
             island_id: island.id.clone(),

@@ -7,6 +7,7 @@ export type RenderShip = {
   from: { x: number; y: number };
   to: { x: number; y: number };
   offset: number;
+  doctor?: NonNullable<WorldState['doctor']>;
   vessel?: NonNullable<NonNullable<WorldState['salvage']>['vessel']>;
   travelSeconds?: number;
   cargo?: NonNullable<WorldState['salvage']>['ships'][number];
@@ -23,6 +24,15 @@ export function createShipAnimator(render: () => void) {
     const seconds = (world?.economy.elapsed_seconds ?? 0) +
       (world?.economy.paused || reducedMotion.matches ? 0 : (now - snapshotTime) / 1000);
     for (const ship of ships) {
+      if (ship.doctor) {
+        const elapsed = world?.economy.paused || reducedMotion.matches ? 0 : Math.min(1, Math.max(0, (now - snapshotTime) / 1000));
+        const length = Math.hypot(ship.to.x - ship.from.x, ship.to.y - ship.from.y);
+        const leg = Math.min(1, ship.doctor.progress + (length ? elapsed * (world?.doctor_rules.speed ?? 120) / length : 0));
+        const progress = ship.doctor.returning ? 1 - leg : leg;
+        ship.graphic.position.set(ship.from.x + (ship.to.x - ship.from.x) * progress, ship.from.y + (ship.to.y - ship.from.y) * progress);
+        ship.graphic.rotation = Math.atan2(ship.to.y - ship.from.y, ship.to.x - ship.from.x) + (ship.doctor.returning ? Math.PI : 0);
+        continue;
+      }
       if (ship.vessel) {
         const v = ship.vessel;
         const moving = v.phase === 'outbound' || v.phase === 'returning';

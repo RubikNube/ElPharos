@@ -27,12 +27,16 @@ export function buildWorldLayers(world: WorldState) {
       for (const lighthouse of nextWorld.lighthouses) {
         if (!isDiscovered(nextWorld, lighthouse.position)) continue;
         const { x, y } = lighthouse.position;
-        if (lighthouse.active) {
+        if (lighthouse.sick) {
+        terrain.addChild(new Graphics().circle(x + 27, y - 28, 12).fill(0x933f4c)
+          .rect(x + 24, y - 36, 6, 16).fill(0xffffff).rect(x + 19, y - 31, 16, 6).fill(0xffffff));
+      }
+      if (lighthouse.active) {
           const light = new Graphics();
           for (let ring = 8; ring >= 1; ring--) {
-            light.circle(x, y, lighthouse.radius * ring / 8).fill({ color: 0xffd34d, alpha: 0.018 });
+            light.circle(x, y, lighthouse.effective_radius * ring / 8).fill({ color: 0xffd34d, alpha: 0.018 });
           }
-          light.circle(x, y, lighthouse.radius).stroke({ color: 0xffd34d, alpha: 0.6, width: 1.5 });
+          light.circle(x, y, lighthouse.effective_radius).stroke({ color: 0xffd34d, alpha: 0.6, width: 1.5 });
           terrain.addChild(light);
         }
         terrain.addChild(new Graphics()
@@ -52,7 +56,7 @@ export function buildWorldLayers(world: WorldState) {
       terrain.alpha = current ? 1 : 0.35;
       const mask = new Graphics();
       for (const light of world.lighthouses) {
-        const radius = current ? (light.active ? light.radius : 0) : light.explored_radius;
+        const radius = current ? (light.active ? light.effective_radius : 0) : light.explored_radius;
         if (radius > 0) mask.circle(light.position.x, light.position.y, radius).fill(0xffffff);
       }
       worldLayer.addChild(terrain, mask);
@@ -76,7 +80,17 @@ export function buildWorldLayers(world: WorldState) {
       if (!from || !to || !isDiscovered(world, from.position)) continue;
       const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(cargo.cargo ? 0xf3b45c : 0xadc7d7).stroke({color: 0x081521, width: 2});
       worldLayer.addChild(graphic);
-      ships.push({graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && Math.hypot(from.position.x-to.position.x, from.position.y-to.position.y) <= from.radius+to.radius});
+      ships.push({graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && Math.hypot(from.position.x-to.position.x, from.position.y-to.position.y) <= from.effective_radius+to.effective_radius});
+    }
+    if (world.doctor) {
+      const haven = world.islands.find(i => i.fuel_facility === 'haven');
+      const target = world.lighthouses.find(l => l.id === world.doctor!.destination);
+      if (haven && target) {
+        const graphic = new Graphics().poly([18, 0, -12, -9, -16, 0, -12, 9]).fill(0xeee5cc)
+          .stroke({ color: 0x081521, width: 2 }).rect(-5, -6, 4, 12).fill(0xc74555).rect(-9, -2, 12, 4).fill(0xc74555);
+        worldLayer.addChild(graphic);
+        ships.push({ graphic, from: haven.position, to: target.position, offset: 0, doctor: world.doctor });
+      }
     }
     const vessel = world.salvage?.vessel;
     const route = world.salvage?.vessel_route;

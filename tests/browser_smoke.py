@@ -84,6 +84,38 @@ try:
     time.sleep(.2)
     js("document.querySelector('.pause').click()")
     time.sleep(.2)
+    # Treat a sick, isolated keeper through the actual panel and animate both legs.
+    doctor_fixture = json.loads(pristine)
+    doctor_fixture['save_version'] = 9
+    doctor_fixture['world']['economy'].update(paused=True, fuel=300)
+    patient = doctor_fixture['world']['lighthouses'][1]
+    patient.update(sick=True, active=True, explored_radius=290)
+    doctor_fixture['world']['lighthouses'][0]['active'] = False
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(doctor_fixture))
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.3)
+    js("Array.from(document.querySelectorAll('nav[aria-label=Lighthouses] button')).find(b => b.textContent.includes('Amber')).click()")
+    assert js("return document.querySelector('.keeper-status').innerText.includes('Sick')")
+    assert js("return document.body.innerText.includes('217.5 units (290 when healthy)')")
+    js("document.querySelector('[aria-label=\"Doctor visits\"] button').click()")
+    time.sleep(.3)
+    assert js("return document.querySelector('.resource.fuel h3').innerText.includes('260')")
+    assert js("return document.querySelector('[aria-label=\"Doctor visits\"]').innerText.includes('outbound to Amber Shoal Light')")
+    screenshot('doctor-outbound')
+    js("document.querySelector('.pause').click()")
+    for _ in range(80):
+        if js("return document.querySelector('[aria-label=\"Doctor visits\"]').innerText.includes('returning from')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Doctor did not treat keeper')
+    assert not js("return document.querySelector('.keeper-status').innerText.includes('Sick')")
+    assert js("return document.body.innerText.includes('290 units')")
+    screenshot('doctor-returning')
+    for _ in range(80):
+        if not js("return document.querySelector('[aria-label=\"Doctor visits\"]').innerText.includes('Doctor ship:')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Doctor did not return')
+    js("document.querySelector('.pause').click()")
+    js("Array.from(document.querySelectorAll('nav[aria-label=Lighthouses] button')).find(b => b.textContent.includes('First')).click()")
     # Build and control the expedition vessel through the actual Haven panel.
     vessel_fixture = json.loads(pristine)
     vessel_fixture['save_version'] = 8
@@ -112,7 +144,7 @@ try:
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.2)
     vessel_saved = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
-    assert vessel_saved['save_version'] == 8
+    assert vessel_saved['save_version'] == 9
     assert vessel_saved['world']['salvage']['vessel']['phase'] == 'outbound'
     vessel_saved['world']['salvage']['vessel'].update(phase='returning', timer=4, cargo=40, enabled=False)
     vessel_saved['world']['economy']['paused'] = False

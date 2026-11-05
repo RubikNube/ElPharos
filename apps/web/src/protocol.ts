@@ -1,13 +1,13 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 
 const point = z.object({ x: z.number(), y: z.number() });
 const island = z.object({
   id: z.string().min(1), name: z.string(), position: point, radius: z.number().positive(),
 });
 const quarter = z.number().nonnegative().multipleOf(0.25);
-const lighthouse = island.extend({ specialization: z.enum(["efficient_lamp", "navigation_beacon"]).nullable(), connected: z.boolean(), fuel_upkeep: quarter.min(0.25).max(2.5), next_fuel_upkeep: quarter.min(0.25).max(2.5).nullable(), island_id: z.string(), active: z.boolean(), explored_radius: z.number().nonnegative() });
+const lighthouse = island.extend({ sick: z.boolean(), immune_until: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), effective_radius: z.number().positive(), specialization: z.enum(["efficient_lamp", "navigation_beacon"]).nullable(), connected: z.boolean(), fuel_upkeep: quarter.min(0.25).max(2.5), next_fuel_upkeep: quarter.min(0.25).max(2.5).nullable(), island_id: z.string(), active: z.boolean(), explored_radius: z.number().nonnegative() });
 export const technologyIdSchema = z.enum(['reinforced_foundations', 'modular_fittings', 'streamlined_hulls', 'expanded_holds', 'precision_lenses', 'improved_refining']);
 export type TechnologyId = z.infer<typeof technologyIdSchema>;
 const researchSchema = z.object({
@@ -36,6 +36,8 @@ export const vesselRulesSchema = z.object({
 });
 const vesselSchema = z.object({ enabled: z.boolean(), phase: z.enum(['docked', 'outbound', 'searching', 'returning']), timer: z.number().int().nonnegative(), cargo: z.number().int().nonnegative() });
 export const worldSchema = z.object({
+  doctor: z.object({ destination: z.string().min(1), returning: z.boolean(), progress: z.number().min(0).lt(1) }).nullable(),
+  doctor_rules: z.object({ trip_fuel: z.literal(40), speed: z.literal(120) }),
   research: researchSchema.nullable(),
   salvage: z.object({ vessel: vesselSchema.nullable(), vessel_route: z.tuple([point, point]).nullable(), rules: z.object({ vessel: vesselRulesSchema, specialization_cost: z.number().int().positive(), refit_cost: z.number().int().positive(), efficiency_saving: quarter, navigation_multiplier: z.number().positive(), capacity: z.number().int().positive(), expand_cost: z.number().int().positive(), restore_cost: z.number().int().positive(), restore_fuel: z.number().positive(), speed: z.number().positive(), hold: z.number().int().positive(), local_capacity: z.number().int().positive(), haven_period: z.number().int().positive() }), reserve: z.number().int().min(0).max(300), haven_timer: z.number().int().min(0).max(9),
     yards: z.array(z.object({ island_id: z.string(), period: z.union([z.literal(2), z.literal(4)]), restored: z.boolean(), stock: z.number().int().min(0).max(60), timer: z.number().int().min(0).max(3), delivered: z.boolean() })),
@@ -49,6 +51,13 @@ export const worldSchema = z.object({
   width: z.number().positive(), height: z.number().positive(),
   islands: z.array(island.extend({ fuel_facility: z.enum(['haven', 'ruined', 'restored', 'none']), fuel_production: z.union([z.literal(0), z.literal(2), z.literal(3), z.literal(4)]) })), lighthouses: z.array(lighthouse),
 }).superRefine((world, ctx) => {
+  for (const light of world.lighthouses) {
+    if (light.effective_radius !== light.radius * (light.sick ? 0.75 : 1) || light.explored_radius > light.radius || (light.active && light.explored_radius < light.effective_radius)) ctx.addIssue({ code: 'custom', message: 'Invalid effective radius or exploration' });
+  }
+  if (world.doctor) {
+    const target = world.lighthouses.find(l => l.id === world.doctor!.destination);
+    if (!target || (!world.doctor.returning && !target.sick) || world.islands.some(i => i.id === target?.island_id && i.fuel_facility === 'haven')) ctx.addIssue({ code: 'custom', message: 'Invalid doctor destination' });
+  }
   const v = world.salvage?.vessel, r = world.salvage?.rules.vessel;
   if (v && r) {
     const valid = v.cargo <= r.hold && !!world.salvage?.vessel_route && (
@@ -67,6 +76,6 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), protocol_version: z.literal(PROTOCOL_VERSION), message: z.string() }),
 ]);
 export type WorldState = z.infer<typeof worldSchema>;
-export type ClientMessage = { type: 'build_salvage_vessel'; protocol_version: typeof PROTOCOL_VERSION } | { type: 'set_salvage_vessel_enabled'; protocol_version: typeof PROTOCOL_VERSION; enabled: boolean } | { type: 'research_technology'; protocol_version: typeof PROTOCOL_VERSION; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'set_simulation_paused'; protocol_version: typeof PROTOCOL_VERSION; paused: boolean } | { type: 'save_game' | 'load_game' | 'restart_game'; protocol_version: typeof PROTOCOL_VERSION; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | {
+export type ClientMessage = { type: 'send_doctor'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | { type: 'build_salvage_vessel'; protocol_version: typeof PROTOCOL_VERSION } | { type: 'set_salvage_vessel_enabled'; protocol_version: typeof PROTOCOL_VERSION; enabled: boolean } | { type: 'research_technology'; protocol_version: typeof PROTOCOL_VERSION; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'set_simulation_paused'; protocol_version: typeof PROTOCOL_VERSION; paused: boolean } | { type: 'save_game' | 'load_game' | 'restart_game'; protocol_version: typeof PROTOCOL_VERSION; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | {
   type: 'set_lighthouse_active'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; active: boolean;
 };

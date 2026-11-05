@@ -6,7 +6,7 @@ export function networkUpkeep(world: WorldState) {
 }
 
 export function isNetworkIlluminated(world: WorldState, position: { x: number; y: number }) {
-  return world.lighthouses.some(light => light.connected && Math.hypot(light.position.x - position.x, light.position.y - position.y) <= light.radius);
+  return world.lighthouses.some(light => light.connected && Math.hypot(light.position.x - position.x, light.position.y - position.y) <= light.effective_radius);
 }
 
 export function lighthouseSelection(world: WorldState, selectedId: string | null) {

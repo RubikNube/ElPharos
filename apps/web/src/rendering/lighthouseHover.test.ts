@@ -7,7 +7,7 @@ function setup() {
   const world = researchWorldFixture();
   world.lighthouses = [100, 250, 900].map((x, i) => ({
     id: `beacon-${i}`, island_id: `island-${i}`, name: `Light ${i}`, position: { x, y: 100 },
-    active: true, connected: true, radius: 290, explored_radius: i === 0 ? 290 : 0,
+    active: true, connected: true, radius: 290, effective_radius: 290, sick: false, immune_until: 300, explored_radius: i === 0 ? 290 : 0,
     specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
   }));
   const host = Object.assign(new EventTarget(), {

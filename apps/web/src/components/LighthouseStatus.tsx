@@ -14,7 +14,7 @@ export function LighthouseStatus({ world, light }: { world: WorldState; light: L
   return <>
     <strong>{light.name}</strong>
     <p>{light.active ? 'Beacon illuminated' : 'Beacon extinguished'} · {light.connected ? 'Connected to First Haven' : 'Isolated from First Haven'}</p>
-    <p>Light radius: {light.radius} units<br />Beacon upkeep: {light.fuel_upkeep} fuel/s{!light.active && ' when lit'}</p>
+    <p>Light radius: {light.effective_radius} units{light.sick && ` (${light.radius} when healthy)`}<br />Beacon upkeep: {light.fuel_upkeep} fuel/s{!light.active && ' when lit'}</p>
     <KeeperStatus world={world} light={light} />
   </>;
 }

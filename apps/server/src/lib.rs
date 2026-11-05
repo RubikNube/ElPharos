@@ -1,4 +1,5 @@
 pub mod domain;
+pub mod health;
 mod network;
 pub mod persistence;
 pub mod protocol;

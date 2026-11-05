@@ -72,11 +72,14 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
             || !light.explored_radius.is_finite()
             || light.explored_radius < 0.0
             || light.explored_radius > light.radius
-            || (light.active && light.explored_radius != light.radius)
+            || (light.active && light.explored_radius < light.effective_radius())
+            || light.immune_until > crate::domain::MAX_SAFE_INTEGER
+            || (light.sick && light.explored_radius == 0.0)
         {
             return Err("Invalid lighthouse or exploration".into());
         }
     }
+    crate::health::validate(world)?;
     crate::research::validate(world)?;
     crate::salvage::validate(world)?;
     Ok(())

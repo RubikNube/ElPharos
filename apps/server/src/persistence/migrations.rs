@@ -45,6 +45,25 @@ pub(super) fn decode(data: &[u8]) -> Result<WorldState, String> {
     {
         return Err("Missing salvage vessel state".into());
     }
+    if legacy_version <= 8 {
+        let until = value["world"]["economy"]["elapsed_seconds"]
+            .as_u64()
+            .ok_or("Invalid elapsed time")?
+            .saturating_add(300)
+            .min(crate::domain::MAX_SAFE_INTEGER);
+        value["world"]["doctor"] = serde_json::Value::Null;
+        for light in value["world"]["lighthouses"]
+            .as_array_mut()
+            .ok_or("Invalid lighthouses")?
+        {
+            let light = light.as_object_mut().ok_or("Invalid lighthouse")?;
+            light.insert("sick".into(), false.into());
+            light.insert("immune_until".into(), until.into());
+        }
+        value["save_version"] = 9.into();
+    } else if value["world"].get("doctor").is_none() {
+        return Err("Missing doctor state".into());
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
     if save.save_version != SAVE_VERSION {
         return Err("Unsupported save version".into());
@@ -166,6 +185,13 @@ mod tests {
         }
         let mut value = json!({ "save_version": version, "world": world });
         let world = value["world"].as_object_mut().unwrap();
+        if version <= 8 {
+            world.remove("doctor");
+            for light in world["lighthouses"].as_array_mut().unwrap() {
+                light.as_object_mut().unwrap().remove("sick");
+                light.as_object_mut().unwrap().remove("immune_until");
+            }
+        }
         if version <= 7
             && let Some(s) = world["salvage"].as_object_mut()
         {
@@ -215,6 +241,36 @@ mod tests {
             let current = json!({ "save_version": SAVE_VERSION, "world": world });
             let reloaded = decode(&serde_json::to_vec(&current).unwrap()).unwrap();
             assert_eq!(serde_json::to_value(reloaded).unwrap(), persisted);
+        }
+    }
+
+    #[test]
+    fn format_eight_adds_grace_period_and_rejects_malformed_lights() {
+        let mut value = historical_save(8);
+        value["world"]["economy"]["elapsed_seconds"] = json!(1200);
+        let world = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(world.doctor.is_none());
+        assert!(
+            world
+                .lighthouses
+                .iter()
+                .all(|l| !l.sick && l.immune_until == 1500)
+        );
+        for malformed in [json!(null), json!(7), json!([])] {
+            value["world"]["lighthouses"][0] = malformed;
+            assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
+        }
+        for field in ["doctor", "sick", "immune_until"] {
+            let mut value = historical_save(SAVE_VERSION);
+            if field == "doctor" {
+                value["world"].as_object_mut().unwrap().remove(field);
+            } else {
+                value["world"]["lighthouses"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(field);
+            }
+            assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
         }
     }
 

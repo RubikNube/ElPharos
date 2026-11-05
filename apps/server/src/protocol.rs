@@ -1,11 +1,15 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 10;
+pub const VERSION: u8 = 11;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    SendDoctor {
+        protocol_version: u8,
+        lighthouse_id: String,
+    },
     BuildSalvageVessel {
         protocol_version: u8,
     },
@@ -60,7 +64,10 @@ pub enum ClientMessage {
 impl ClientMessage {
     pub fn version(&self) -> u8 {
         match self {
-            ClientMessage::BuildSalvageVessel { protocol_version }
+            ClientMessage::SendDoctor {
+                protocol_version, ..
+            }
+            | ClientMessage::BuildSalvageVessel { protocol_version }
             | ClientMessage::SetSalvageVesselEnabled {
                 protocol_version, ..
             }
@@ -137,6 +144,7 @@ fn serialize_snapshot<S: serde::Serializer>(
     struct Light<'a> {
         #[serde(flatten)]
         lighthouse: &'a Lighthouse,
+        effective_radius: f64,
         connected: bool,
         fuel_upkeep: f64,
         next_fuel_upkeep: Option<f64>,
@@ -157,6 +165,8 @@ fn serialize_snapshot<S: serde::Serializer>(
     }
     #[derive(Serialize)]
     struct Snapshot<'a> {
+        doctor: &'a Option<crate::health::DoctorVoyage>,
+        doctor_rules: crate::health::DoctorRules,
         economy: EconomySnapshot<'a>,
         salvage: Option<SalvageSnapshot<'a>>,
         research: Option<crate::research::Snapshot<'a>>,
@@ -186,6 +196,8 @@ fn serialize_snapshot<S: serde::Serializer>(
         })
         .collect();
     Snapshot {
+        doctor: &world.doctor,
+        doctor_rules: crate::health::DoctorRules::default(),
         salvage: world.salvage.as_ref().map(|data| SalvageSnapshot {
             data,
             vessel_route: world.vessel_route(),
@@ -218,6 +230,7 @@ fn serialize_snapshot<S: serde::Serializer>(
             .iter()
             .enumerate()
             .map(|(i, lighthouse)| Light {
+                effective_radius: lighthouse.effective_radius(),
                 connected: connected[i],
                 lighthouse,
                 fuel_upkeep: world.lighthouse_upkeep_at_radius(lighthouse, lighthouse.radius),

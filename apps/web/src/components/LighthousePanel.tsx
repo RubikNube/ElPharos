@@ -2,6 +2,7 @@ import type { WorldState } from '../protocol';
 import type { WorldStore } from '../state/worldStore';
 import type { WorldCommands } from '../network/commands';
 import { SalvageVesselPanel } from './SalvageVesselPanel';
+import { DoctorPanel } from './DoctorPanel';
 import { KeeperStatus } from './LighthouseStatus';
 import { cargoStatus } from '../shipping';
 import { isDiscovered } from '../rendering/visibility';
@@ -16,7 +17,7 @@ export function LighthousePanel({ world, selectedId, connection, commands, onSel
   return <>
       <p className="eyebrow">LIGHTHOUSE NETWORK</p>
       <h2>{lighthouse?.name ?? 'Select a lighthouse'}</h2>
-      <nav aria-label="Lighthouses">{world.lighthouses.filter(light => isDiscovered(world, light.position)).map(light => <button key={light.id} aria-pressed={selectedId === light.id} onClick={() => onSelect(light.id)}>{light.name}</button>)}</nav>
+      <nav aria-label="Lighthouses">{world.lighthouses.filter(light => isDiscovered(world, light.position)).map(light => <button key={light.id} aria-pressed={selectedId === light.id} onClick={() => onSelect(light.id)}>{light.name}{light.sick && ' · Sick'}</button>)}</nav>
       <p className="intro">Bring light to a quiet corner of the ocean.</p>
       {lighthouse && <>
         <p className="hint">{lighthouse.connected ? 'Connected to First Haven' : 'Isolated from First Haven'}</p>
@@ -24,8 +25,9 @@ export function LighthousePanel({ world, selectedId, connection, commands, onSel
         {cannotLight && <p role="status">Not enough fuel for one second of network upkeep.</p>}
         <div className="beacon-status"><span className={lighthouse.active ? 'lit' : ''}>◉</span><strong>{lighthouse.active ? 'Beacon illuminated' : 'Beacon extinguished'}</strong></div>
         <KeeperStatus key={lighthouse.id} world={world} light={lighthouse} />
+        <DoctorPanel world={world} light={lighthouse} connected={connection === 'connected'} commands={commands} />
         <dl><div><dt>Island</dt><dd>{world.islands.find((island) => island.id === lighthouse.island_id && isDiscovered(world, island.position))?.name ?? 'Uncharted island'}</dd></div>
-          <div><dt>Light radius</dt><dd>{lighthouse.radius} units</dd></div></dl>
+          <div><dt>Light radius</dt><dd>{lighthouse.effective_radius} units{lighthouse.sick && ` (${lighthouse.radius} when healthy)`}</dd></div></dl>
         <button className="primary" disabled={connection !== 'connected' || cannotLight} onClick={() => commands.setLighthouseActive(lighthouse.id, !lighthouse.active)}>{lighthouse.active ? 'Extinguish beacon' : 'Light the beacon'}</button>
         <button className="expand" disabled={connection !== 'connected' || lighthouse.radius >= world.radius_max || (!!world.salvage && world.salvage.reserve < world.salvage.rules.expand_cost)} onClick={() => commands.expandLighthouse(lighthouse.id)}>Expand radius (+{world.radius_step}){world.salvage && ` — ${world.salvage.rules.expand_cost} Salvage`}</button>
         {lighthouse.next_fuel_upkeep !== null && <p className="upgrade-preview">After expansion: {lighthouse.next_fuel_upkeep} fuel/s when lit.</p>}

@@ -72,7 +72,7 @@ impl NetworkView {
         world.lighthouses.iter().enumerate().any(|(i, light)| {
             self.connected[i]
                 && (position.x - light.position.x).hypot(position.y - light.position.y)
-                    <= light.radius
+                    <= light.effective_radius()
         })
     }
 
