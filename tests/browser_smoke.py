@@ -60,13 +60,14 @@ try:
     time.sleep(1)
     assert js("return document.querySelectorAll('canvas').length") == 1
     assert js("return document.body.innerText.includes('First Haven') && document.body.innerText.includes('Beacon illuminated')")
-    assert js("return document.querySelector('.economy').innerText.includes('Fuel:')")
+    assert js("return document.querySelector('.resource.fuel').innerText.includes('Fuel:')")
+    assert js("return document.querySelector('header [aria-label=\"Resources\"]') !== null && !document.querySelector('aside [aria-label=\"Fuel economy\"]')")
     js("document.querySelector('.pause').click()")
     time.sleep(.2)
     assert js("return document.body.innerText.includes('Simulation paused')")
-    frozen = js("return document.querySelector('.economy h3').innerText")
+    frozen = js("return document.querySelector('.resource.fuel h3').innerText")
     time.sleep(1.2)
-    assert js("return document.querySelector('.economy h3').innerText") == frozen
+    assert js("return document.querySelector('.resource.fuel h3').innerText") == frozen
     js("document.querySelector('.pause').click()")
     time.sleep(.2)
     assert js("return document.body.innerText.includes('Simulation running')")
@@ -181,7 +182,7 @@ try:
     assert js("return document.body.innerText.includes('Beacon upkeep: 1.25 fuel/s')")
     assert js("return document.querySelector('.upgrade-preview').innerText.includes('1.5 fuel/s')")
     for _ in range(30):
-        if js("return !Number.isInteger(Number(document.querySelector('.economy h3').innerText.split(' ')[1]))"): break
+        if js("return !Number.isInteger(Number(document.querySelector('.resource.fuel h3').innerText.split(' ')[1]))"): break
         time.sleep(.1)
     else: raise RuntimeError('Fractional fuel was not displayed')
     for _ in range(3):
@@ -198,7 +199,7 @@ try:
     js("document.querySelector('.fuel-facility button').click()")
     time.sleep(.2)
     assert js("return document.querySelector('.fuel-facility').innerText.includes('Operational · +3 fuel/s')")
-    assert js("return document.querySelector('.economy').innerText.includes('Production: +5/s')")
+    assert js("return document.querySelector('.resource.fuel').title.includes('Production: +5/s')")
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.3)
     assert js("return document.body.innerText.includes('World saved.')")
@@ -214,7 +215,7 @@ try:
     time.sleep(.2)
     assert js("return document.querySelectorAll('nav button').length") == 4
     assert js("return document.querySelector('.fuel-facility').innerText.includes('Isolated · +0 fuel/s')")
-    assert js("return document.querySelector('.economy').innerText.includes('Production: +2/s')")
+    assert js("return document.querySelector('.resource.fuel').title.includes('Production: +2/s')")
     before = screenshot('before-pan')
     req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 0, 'x': 500, 'y': 400}, {'type': 'pointerDown', 'button': 0}, {'type': 'pointerMove', 'duration': 200, 'x': 650, 'y': 450}, {'type': 'pointerUp', 'button': 0}]}]})
     assert screenshot('panned') != before
@@ -278,7 +279,7 @@ try:
         js(f"document.querySelectorAll('nav button')[{target}].click()")
         js("document.querySelector('.primary').click()")
         time.sleep(.15)
-        print(f"Restoring island {target + 1}: " + js("return document.querySelector('.economy').innerText"), flush=True)
+        print(f"Restoring island {target + 1}: " + js("return document.querySelector('.resource.fuel').innerText"), flush=True)
         # Earn enough for the third restoration using the actual simulation.
         js("if(document.querySelector('.fuel-facility button').disabled) document.querySelector('.pause').click()")
         for _ in range(900):
@@ -288,7 +289,7 @@ try:
         js("document.querySelector('.fuel-facility button').click()")
         time.sleep(.15)
     assert js("return document.querySelector('.objective h3').innerText === 'Archipelago restored'")
-    assert js("return document.querySelector('.economy').innerText.includes('Production: +11/s')")
+    assert js("return document.querySelector('.resource.fuel').title.includes('Production: +11/s')")
     screenshot('complete-network')
     # Losing and restoring the anchor updates the objective and production.
     js("document.querySelectorAll('nav button')[0].click()")
@@ -296,7 +297,7 @@ try:
     js("document.querySelector('.primary').click()")
     time.sleep(.2)
     assert js("return document.querySelector('.objective h3').innerText === 'Reconnect the archipelago'")
-    assert js("return document.querySelector('.economy').innerText.includes('Production: +2/s')")
+    assert js("return document.querySelector('.resource.fuel').title.includes('Production: +2/s')")
     js("document.querySelector('.primary').click()")
     time.sleep(.2)
     assert js("return document.querySelector('.objective h3').innerText === 'Archipelago restored'")

@@ -6,7 +6,7 @@ button:hover { background: #203c50; }
 button:disabled { opacity: .5; cursor: wait; }
 button:focus-visible, .map:focus-visible { outline: 2px solid #ffd34d; outline-offset: -3px; }
 .app { height: 100dvh; min-height: 540px; display: flex; flex-direction: column; }
-header { min-height: 92px; display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; border-bottom: 1px solid #223847; gap: 16px; }
+header { min-height: 92px; flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid #223847; gap: 16px 24px; background: #081521; }
 .brand { display: flex; align-items: center; gap: 16px; }
 .brand-mark { font-size: 38px; color: #ffd34d; }
 h1 { font: 24px Georgia, serif; letter-spacing: 5px; margin: 0; }
@@ -14,6 +14,22 @@ h1 { font: 24px Georgia, serif; letter-spacing: 5px; margin: 0; }
 .connection { font-size: 12px; color: #b3a77d; }
 .connection::before { content: '●'; margin-right: 8px; }
 .connection.connected { color: #9ebda9; }
+.resource-bar { display: flex; align-items: stretch; gap: 24px; margin-left: auto; }
+.resource { display: flex; align-items: center; gap: 10px; }
+.resource-icon { width: 26px; height: 26px; flex-shrink: 0; }
+.fuel .resource-icon { color: #ffd34d; }
+.salvage .resource-icon { color: #9ed9cd; }
+.resource h3 { margin: 0; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.resource h3 strong { font-size: 18px; font-weight: 600; }
+.resource h3 span, .resource p { color: #9aadb7; }
+.resource h3, .resource p, .simulation-controls p { font-variant-numeric: tabular-nums; }
+.resource p { margin: 4px 0 0; font-size: 11px; white-space: nowrap; }
+.resource p.resource-income { color: #9ed9cd; }
+.resource p.resource-deficit { color: #ffb296; }
+.resource p span { color: #9aadb7; }
+.simulation-controls { display: flex; align-items: center; gap: 10px; }
+.simulation-controls p { margin: 0; font-size: 10px; color: #9aadb7; }
+.pause { padding: 7px 12px; font-size: 12px; min-width: 74px; }
 .workspace { display: flex; flex: 1; min-height: 0; }
 .map-panel { position: relative; flex: 1; min-width: 0; min-height: 320px; overflow: hidden; }
 .map { width: 100%; height: 100%; position: absolute; cursor: grab; touch-action: none; }
@@ -45,8 +61,15 @@ footer { display: flex; justify-content: space-between; padding: 15px 30px; bord
 .footer-divider { padding: 0 10px; color: #b6a56e; }
 @media (max-width: 720px) {
   .app { height: auto; min-height: 100dvh; }
-  header { padding: 18px; } h1 { font-size: 18px; letter-spacing: 3px; }
+  header { padding: 14px 18px; gap: 14px; } h1 { font-size: 18px; letter-spacing: 3px; }
   .brand-mark { display: none; } .connection { font-size: 10px; }
+  .resource-bar { order: 2; width: 100%; margin-left: 0; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid #223847; }
+  .resource { gap: 6px; }
+  .resource-icon { width: 20px; height: 20px; }
+  .resource h3 { font-size: 11px; }
+  .resource h3 strong { font-size: 16px; }
+  .resource p { font-size: 10px; }
+  .simulation-controls { order: 3; width: 100%; justify-content: space-between; }
   .workspace { flex-direction: column; }
   .map-panel { min-height: 55dvh; }
   aside { width: 100%; border-left: 0; border-top: 1px solid #223847; }
@@ -59,10 +82,6 @@ button[aria-pressed="true"] { border-color: #ffd34d; }
 
 .expand { width: 100%; margin-top: 10px; }
 .save-controls { display: flex; gap: 8px; margin-top: 20px; }
-
-.economy { border-bottom: 1px solid #2b3d47; padding-bottom: 20px; margin-bottom: 24px; }
-.economy h3 { color: #ffd34d; margin: 0 0 12px; }
-.economy p { color: #9aadb7; font-size: 12px; line-height: 1.7; }
 
 .objective { border: 1px solid #5c573d; background: #ffd34d08; padding: 14px; margin-bottom: 24px; }
 .objective h3 { color: #ffd34d; font-size: 15px; margin: 0 0 10px; }
