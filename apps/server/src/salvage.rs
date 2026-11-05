@@ -15,6 +15,7 @@ pub const LOCAL_CAPACITY: u32 = 60;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Salvage {
+    pub vessel: Option<crate::vessel::Vessel>,
     pub reserve: u32,
     pub haven_timer: u32,
     pub yards: Vec<Yard>,
@@ -44,6 +45,7 @@ pub struct Ship {
 impl Default for Salvage {
     fn default() -> Self {
         Self {
+            vessel: None,
             reserve: STARTING_RESERVE,
             haven_timer: 0,
             ships: vec![],
@@ -275,6 +277,7 @@ impl WorldState {
 }
 
 pub fn validate(w: &WorldState) -> Result<(), String> {
+    crate::vessel::validate(w)?;
     let Some(s) = &w.salvage else {
         return Ok(());
     };

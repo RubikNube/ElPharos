@@ -35,6 +35,16 @@ pub(super) fn decode(data: &[u8]) -> Result<WorldState, String> {
     } else if value["world"].get("research").is_none() {
         return Err("Missing research state".into());
     }
+    if legacy_version <= 7 {
+        if let Some(salvage) = value["world"]["salvage"].as_object_mut() {
+            salvage.insert("vessel".into(), serde_json::Value::Null);
+        }
+        value["save_version"] = 8.into();
+    } else if value["world"]["salvage"].is_object()
+        && value["world"]["salvage"].get("vessel").is_none()
+    {
+        return Err("Missing salvage vessel state".into());
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
     if save.save_version != SAVE_VERSION {
         return Err("Unsupported save version".into());
@@ -156,6 +166,11 @@ mod tests {
         }
         let mut value = json!({ "save_version": version, "world": world });
         let world = value["world"].as_object_mut().unwrap();
+        if version <= 7
+            && let Some(s) = world["salvage"].as_object_mut()
+        {
+            s.remove("vessel");
+        }
         if version <= 6 {
             world.remove("research");
         }
@@ -196,6 +211,7 @@ mod tests {
             assert_eq!(world.islands.len(), if version <= 4 { 4 } else { 6 });
             assert_eq!(world.salvage.is_none(), version <= 4);
             assert_eq!(world.research.is_none(), version <= 4);
+            assert!(world.salvage.as_ref().is_none_or(|s| s.vessel.is_none()));
             let current = json!({ "save_version": SAVE_VERSION, "world": world });
             let reloaded = decode(&serde_json::to_vec(&current).unwrap()).unwrap();
             assert_eq!(serde_json::to_value(reloaded).unwrap(), persisted);
@@ -225,6 +241,12 @@ mod tests {
             value["world"].as_object_mut().unwrap().remove("salvage");
             assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
         }
+        let mut missing_vessel = historical_save(SAVE_VERSION);
+        missing_vessel["world"]["salvage"]
+            .as_object_mut()
+            .unwrap()
+            .remove("vessel");
+        assert!(decode(&serde_json::to_vec(&missing_vessel).unwrap()).is_err());
         let mut value = historical_save(SAVE_VERSION);
         value["world"].as_object_mut().unwrap().remove("research");
         assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());

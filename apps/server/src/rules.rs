@@ -8,6 +8,7 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct EffectiveRules {
+    pub vessel: crate::vessel::VesselRules,
     #[serde(skip)]
     pub restored_facility_production: u32,
     pub specialization_cost: u32,
@@ -26,6 +27,7 @@ pub struct EffectiveRules {
 impl Default for EffectiveRules {
     fn default() -> Self {
         Self {
+            vessel: crate::vessel::VesselRules::default(),
             restored_facility_production: 3,
             specialization_cost: crate::domain::SPECIALIZATION_COST,
             refit_cost: crate::domain::REFIT_COST,

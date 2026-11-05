@@ -140,6 +140,10 @@ impl GameService {
                 let mut result = Ok(());
                 changed = state.world.send_if_modified(|world| {
                     let change = match command {
+                        ClientMessage::BuildSalvageVessel { .. } => world.build_salvage_vessel(),
+                        ClientMessage::SetSalvageVesselEnabled { enabled, .. } => {
+                            world.set_salvage_vessel_enabled(enabled)
+                        }
                         ClientMessage::ResearchTechnology { technology_id, .. } => {
                             world.research_technology(technology_id)
                         }

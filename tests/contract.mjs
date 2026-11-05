@@ -14,6 +14,9 @@ test('actual Rust snapshots and responses satisfy the frontend schema', () => {
   assert.equal(worlds[1].salvage, null);
   assert.equal(worlds[2].salvage.ships[0].cargo, 30);
   assert.equal(worlds[2].economy.restored_facility_production, 4);
+  assert.equal(worlds[2].salvage.vessel.phase, 'searching');
+  assert.equal(worlds[2].salvage.vessel.cargo, 3);
+  assert.equal(worlds[2].salvage.vessel_route.length, 2);
   assert.equal(worlds[3].economy.paused, true);
   assert.equal(worlds[4].economy.blackout, true);
 });

@@ -4,11 +4,11 @@ import { researchFixture, researchWorldFixture } from './research.fixture';
 import { serverMessageSchema, worldSchema } from './protocol';
 
 it('rejects incompatible protocol versions and invalid geometry', () => {
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 99, message: 'test' }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 9, world: {
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 109, message: 'test' }).success).toBe(false);
+  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 10, world: {
     research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: -1, height: 100, islands: [], lighthouses: [],
   } }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 9, message: 'Unknown lighthouse' }).success).toBe(true);
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 10, message: 'Unknown lighthouse' }).success).toBe(true);
 });
 
 it('validates fuel and simulation state from the authoritative snapshot', () => {
@@ -54,7 +54,8 @@ it('validates authoritative cargo and Salvage rules', () => {
     objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650, islands: [], lighthouses: [],
   };
   const salvage = {
-    rules: { specialization_cost: 40, refit_cost: 20, efficiency_saving: 0.5, navigation_multiplier: 1.5, capacity: 300, expand_cost: 20, restore_cost: 40, restore_fuel: 120, speed: 60, hold: 20, local_capacity: 60, haven_period: 10 },
+    vessel: null, vessel_route: null,
+    rules: { vessel: { build_fuel: 200, trip_fuel: 120, fuel_reserve: 120, hold: 40, travel_seconds: 5, salvage_period: 2 }, specialization_cost: 40, refit_cost: 20, efficiency_saving: 0.5, navigation_multiplier: 1.5, capacity: 300, expand_cost: 20, restore_cost: 40, restore_fuel: 120, speed: 60, hold: 20, local_capacity: 60, haven_period: 10 },
     reserve: 60, haven_timer: 1,
     yards: [{ island_id: 'island-5', period: 4, restored: true, stock: 3, timer: 1, delivered: false }],
     ships: [{ yard_id: 'island-5', from: 'beacon-5', to: 'beacon-1', progress: 0.25, cargo: 10, returning: false, route: ['beacon-5', 'beacon-1'] }],
@@ -103,4 +104,24 @@ it('uses researched shipping speed with non-stacking navigation bonuses', () => 
   expect(cargoSpeed(world, 'a', 'b')).toBe(112.5);
   world.lighthouses[1].specialization = 'navigation_beacon';
   expect(cargoSpeed(world, 'b', 'a')).toBe(112.5);
+});
+
+it('rejects inconsistent expedition phases and missing vessel routes', async () => {
+  const { researchWorldFixture } = await import('./research.fixture');
+  const world = researchWorldFixture();
+  const s = world.salvage!;
+  s.vessel_route = [{ x: 100, y: 100 }, { x: 200, y: 100 }];
+  s.vessel = { enabled: true, phase: 'searching', timer: 21, cargo: 10 };
+  expect(worldSchema.safeParse(world).success).toBe(true);
+  s.vessel.cargo = 11;
+  expect(worldSchema.safeParse(world).success).toBe(false);
+  s.vessel = { enabled: false, phase: 'returning', timer: 4, cargo: 40 };
+  expect(worldSchema.safeParse(world).success).toBe(true);
+  s.vessel.timer = 5;
+  expect(worldSchema.safeParse(world).success).toBe(false);
+  s.vessel = { enabled: true, phase: 'docked', timer: 0, cargo: 41 };
+  expect(worldSchema.safeParse(world).success).toBe(false);
+  s.vessel.cargo = 0;
+  s.vessel_route = null;
+  expect(worldSchema.safeParse(world).success).toBe(false);
 });

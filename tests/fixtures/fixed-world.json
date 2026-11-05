@@ -23,7 +23,8 @@
         "delivered": false
       }
     ],
-    "ships": []
+    "ships": [],
+    "vessel": null
   },
   "economy": {
     "fuel": 300,

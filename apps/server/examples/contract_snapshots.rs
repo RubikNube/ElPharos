@@ -38,6 +38,12 @@ fn main() {
     salvage.ships[0].to = "beacon-1".into();
     salvage.ships[0].progress = 0.25;
     salvage.ships[0].route = vec!["beacon-5".into(), "beacon-1".into()];
+    researched.economy.fuel = 600.0;
+    researched.build_salvage_vessel().unwrap();
+    researched.tick_salvage_vessel();
+    for _ in 0..12 {
+        researched.tick_salvage_vessel();
+    }
     let mut paused = researched.clone();
     paused.set_paused(true).unwrap();
     let mut blackout = researched.clone();

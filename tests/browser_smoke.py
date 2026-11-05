@@ -84,6 +84,51 @@ try:
     time.sleep(.2)
     js("document.querySelector('.pause').click()")
     time.sleep(.2)
+    # Build and control the expedition vessel through the actual Haven panel.
+    vessel_fixture = json.loads(pristine)
+    vessel_fixture['save_version'] = 8
+    vessel_fixture['world']['economy'].update(paused=True, fuel=600)
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(vessel_fixture))
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.2)
+    vessel_panel = '[aria-label="Salvage vessel"]'
+    assert js(f"return document.querySelector({json.dumps(vessel_panel)}).innerText.includes('Build salvage vessel — 200 fuel')")
+    js(f"document.querySelector({json.dumps(vessel_panel + ' button')}).click()")
+    time.sleep(.2)
+    assert js("return document.querySelector('.resource.fuel h3').innerText.includes('400')")
+    assert js(f"return document.querySelector({json.dumps(vessel_panel)}).innerText.includes('Cargo: 0/40')")
+    js(f"document.querySelector({json.dumps(vessel_panel + ' button')}).click()")
+    time.sleep(.2)
+    assert js(f"return document.querySelector({json.dumps(vessel_panel + ' button')}).getAttribute('aria-pressed') === 'false'")
+    js(f"document.querySelector({json.dumps(vessel_panel + ' button')}).click()")
+    js("document.querySelector('.pause').click()")
+    for _ in range(40):
+        if js(f"return document.querySelector({json.dumps(vessel_panel)}).innerText.includes('Sailing to nearby waters')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Vessel did not depart')
+    screenshot('salvage-vessel')
+    js("document.querySelector('.pause').click()")
+    time.sleep(.2)
+    js("document.querySelector('.save-controls button').click()")
+    time.sleep(.2)
+    vessel_saved = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
+    assert vessel_saved['save_version'] == 8
+    assert vessel_saved['world']['salvage']['vessel']['phase'] == 'outbound'
+    vessel_saved['world']['salvage']['vessel'].update(phase='returning', timer=4, cargo=40, enabled=False)
+    vessel_saved['world']['economy']['paused'] = False
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(vessel_saved))
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    for _ in range(40):
+        if js(f"return document.querySelector({json.dumps(vessel_panel)}).innerText.includes('Automatic expeditions disabled')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Vessel did not return and unload')
+    assert js(f"return document.querySelector({json.dumps(vessel_panel)}).innerText.includes('Cargo: 0/40')")
+    assert js("return Number(document.querySelector('.resource.salvage h3').innerText.match(/Salvage: ([0-9]+)/)[1]) >= 140")
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(pristine)
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.2)
+    js("document.querySelector('.pause').click()")
+    time.sleep(.2)
     specialization = '[aria-label="Lighthouse specialization"]'
     js(f"document.querySelector({json.dumps(specialization + ' button')}).click()")
     time.sleep(.2)

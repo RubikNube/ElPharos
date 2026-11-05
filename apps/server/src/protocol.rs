@@ -1,11 +1,18 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 9;
+pub const VERSION: u8 = 10;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    BuildSalvageVessel {
+        protocol_version: u8,
+    },
+    SetSalvageVesselEnabled {
+        protocol_version: u8,
+        enabled: bool,
+    },
     ResearchTechnology {
         protocol_version: u8,
         technology_id: crate::research::Technology,
@@ -53,7 +60,11 @@ pub enum ClientMessage {
 impl ClientMessage {
     pub fn version(&self) -> u8 {
         match self {
-            ClientMessage::ResearchTechnology {
+            ClientMessage::BuildSalvageVessel { protocol_version }
+            | ClientMessage::SetSalvageVesselEnabled {
+                protocol_version, ..
+            }
+            | ClientMessage::ResearchTechnology {
                 protocol_version, ..
             }
             | ClientMessage::SetLighthouseSpecialization {
@@ -177,6 +188,7 @@ fn serialize_snapshot<S: serde::Serializer>(
     Snapshot {
         salvage: world.salvage.as_ref().map(|data| SalvageSnapshot {
             data,
+            vessel_route: world.vessel_route(),
             rules: world.effective_rules(),
         }),
         research: world.research_snapshot(),
@@ -225,6 +237,7 @@ fn serialize_snapshot<S: serde::Serializer>(
 struct SalvageSnapshot<'a> {
     #[serde(flatten)]
     data: &'a crate::salvage::Salvage,
+    vessel_route: Option<[crate::domain::Point; 2]>,
     rules: crate::rules::EffectiveRules,
 }
 

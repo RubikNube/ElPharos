@@ -313,7 +313,7 @@ mod tests {
         assert_eq!(w.economy.fuel, 2.0);
         assert!(w.lighthouses[4].active);
         let snapshot = serde_json::to_value(crate::protocol::ServerMessage::WorldSnapshot {
-            protocol_version: 9,
+            protocol_version: 10,
             world: &w,
         })
         .unwrap();
@@ -343,7 +343,7 @@ mod tests {
         w.set_lighthouse_active("beacon-1", false).unwrap();
         assert_eq!(w.production(), 2);
         let snapshot = serde_json::to_value(crate::protocol::ServerMessage::WorldSnapshot {
-            protocol_version: 9,
+            protocol_version: 10,
             world: &w,
         })
         .unwrap();

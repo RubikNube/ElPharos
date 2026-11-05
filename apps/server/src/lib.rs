@@ -8,6 +8,7 @@ pub mod salvage;
 mod scenario;
 mod service;
 mod validation;
+pub mod vessel;
 
 use axum::{
     Router,

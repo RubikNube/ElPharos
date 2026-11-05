@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 
 const point = z.object({ x: z.number(), y: z.number() });
 const island = z.object({
@@ -29,9 +29,15 @@ const researchSchema = z.object({
     }
   }
 });
+export const vesselRulesSchema = z.object({
+  build_fuel: z.number().int().positive(), trip_fuel: z.number().int().positive(),
+  fuel_reserve: z.number().int().nonnegative(), hold: z.number().int().positive(),
+  travel_seconds: z.number().int().positive(), salvage_period: z.number().int().positive(),
+});
+const vesselSchema = z.object({ enabled: z.boolean(), phase: z.enum(['docked', 'outbound', 'searching', 'returning']), timer: z.number().int().nonnegative(), cargo: z.number().int().nonnegative() });
 export const worldSchema = z.object({
   research: researchSchema.nullable(),
-  salvage: z.object({ rules: z.object({ specialization_cost: z.number().int().positive(), refit_cost: z.number().int().positive(), efficiency_saving: quarter, navigation_multiplier: z.number().positive(), capacity: z.number().int().positive(), expand_cost: z.number().int().positive(), restore_cost: z.number().int().positive(), restore_fuel: z.number().positive(), speed: z.number().positive(), hold: z.number().int().positive(), local_capacity: z.number().int().positive(), haven_period: z.number().int().positive() }), reserve: z.number().int().min(0).max(300), haven_timer: z.number().int().min(0).max(9),
+  salvage: z.object({ vessel: vesselSchema.nullable(), vessel_route: z.tuple([point, point]).nullable(), rules: z.object({ vessel: vesselRulesSchema, specialization_cost: z.number().int().positive(), refit_cost: z.number().int().positive(), efficiency_saving: quarter, navigation_multiplier: z.number().positive(), capacity: z.number().int().positive(), expand_cost: z.number().int().positive(), restore_cost: z.number().int().positive(), restore_fuel: z.number().positive(), speed: z.number().positive(), hold: z.number().int().positive(), local_capacity: z.number().int().positive(), haven_period: z.number().int().positive() }), reserve: z.number().int().min(0).max(300), haven_timer: z.number().int().min(0).max(9),
     yards: z.array(z.object({ island_id: z.string(), period: z.union([z.literal(2), z.literal(4)]), restored: z.boolean(), stock: z.number().int().min(0).max(60), timer: z.number().int().min(0).max(3), delivered: z.boolean() })),
     ships: z.array(z.object({ yard_id: z.string(), from: z.string(), to: z.string(), progress: z.number().min(0).lt(1), cargo: z.number().int().min(0).max(30), returning: z.boolean(), route: z.array(z.string()) })),
   }).nullable(),
@@ -43,6 +49,15 @@ export const worldSchema = z.object({
   width: z.number().positive(), height: z.number().positive(),
   islands: z.array(island.extend({ fuel_facility: z.enum(['haven', 'ruined', 'restored', 'none']), fuel_production: z.union([z.literal(0), z.literal(2), z.literal(3), z.literal(4)]) })), lighthouses: z.array(lighthouse),
 }).superRefine((world, ctx) => {
+  const v = world.salvage?.vessel, r = world.salvage?.rules.vessel;
+  if (v && r) {
+    const valid = v.cargo <= r.hold && !!world.salvage?.vessel_route && (
+      v.phase === 'docked' ? v.timer === 0 :
+      v.phase === 'outbound' ? v.cargo === 0 && v.timer < r.travel_seconds :
+      v.phase === 'returning' ? v.cargo === r.hold && v.timer < r.travel_seconds :
+      v.timer < r.hold * r.salvage_period && v.cargo === Math.floor(v.timer / r.salvage_period));
+    if (!valid) ctx.addIssue({ code: 'custom', message: 'Invalid salvage vessel' });
+  }
   if ((world.research === null) !== (world.salvage === null)) ctx.addIssue({ code: 'custom', message: 'Research requires Salvage' });
   if (world.salvage?.ships.some(s => s.cargo > world.salvage!.rules.hold)) ctx.addIssue({ code: 'custom', message: 'Cargo exceeds effective hold' });
 });
@@ -52,6 +67,6 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), protocol_version: z.literal(PROTOCOL_VERSION), message: z.string() }),
 ]);
 export type WorldState = z.infer<typeof worldSchema>;
-export type ClientMessage = { type: 'research_technology'; protocol_version: typeof PROTOCOL_VERSION; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'set_simulation_paused'; protocol_version: typeof PROTOCOL_VERSION; paused: boolean } | { type: 'save_game' | 'load_game' | 'restart_game'; protocol_version: typeof PROTOCOL_VERSION; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | {
+export type ClientMessage = { type: 'build_salvage_vessel'; protocol_version: typeof PROTOCOL_VERSION } | { type: 'set_salvage_vessel_enabled'; protocol_version: typeof PROTOCOL_VERSION; enabled: boolean } | { type: 'research_technology'; protocol_version: typeof PROTOCOL_VERSION; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'set_simulation_paused'; protocol_version: typeof PROTOCOL_VERSION; paused: boolean } | { type: 'save_game' | 'load_game' | 'restart_game'; protocol_version: typeof PROTOCOL_VERSION; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | {
   type: 'set_lighthouse_active'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; active: boolean;
 };

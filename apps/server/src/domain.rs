@@ -274,6 +274,7 @@ impl WorldState {
             e.fuel -= upkeep;
         }
         self.tick_salvage();
+        self.tick_salvage_vessel();
         let e = &mut self.economy;
         e.elapsed_seconds += 1;
         self.revision = revision;

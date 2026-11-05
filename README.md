@@ -95,9 +95,9 @@ automatically. The side panel shows fuel, rates, pause status, and shortage feed
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
 preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
-New saves use format 7 and persist facilities, Salvage, specializations, and
+New saves use format 8 and persist facilities, Salvage, specializations, salvage vessels, and
 research rather than derived production. Save formats 1–7 remain supported.
-Wire protocol 9 requires matching client and server versions.
+Wire protocol 10 requires matching client and server versions.
 
 ## Connected shipping and scenario goal
 
@@ -265,10 +265,32 @@ as well as restoring every fuel facility and connecting all beacons
 with sustainable fuel. Production timers and cargo in transit are saved.
 Formats 1–4 retain their original map, free expansion, and objective under a
 legacy ruleset, which remains in effect after saving again. Current saves use
-format 7 and matching clients and servers use wire protocol 9. The older sections
+format 8 and matching clients and servers use wire protocol 10. The older sections
 above describe the original four-island scenario; these rules supersede them for
 new games. Base Salvage constants live in `apps/server/src/salvage.rs`;
 `apps/server/src/rules.rs` collects effective rules for simulation and snapshots.
+
+## Salvage expeditions
+
+Select First Haven's lighthouse to build one large **salvage vessel for 200 fuel**,
+with no Salvage construction cost. Automatic expeditions start enabled. Each trip
+loads **120 fuel** before departure, sails out for 5 seconds, recovers **40 Salvage**
+over 80 seconds, and returns in 5 seconds. Fuel payment happens after lighthouse
+upkeep. Departures require at least **240 fuel**, leaving **120 fuel** in reserve,
+and room for a full 40 Salvage in Haven's existing store.
+
+The vessel searches nearby water independently of lighthouse coverage, including
+during blackouts, without revealing terrain or discovering islands. Global pause
+freezes expeditions. If Haven fills during a trip, the vessel unloads what fits
+and keeps the remainder aboard until space opens. **Stop automatic expeditions**
+finishes the current trip and prevents another departure; unloading continues.
+The panel shows cargo, trip progress, and fuel/storage waiting reasons.
+
+The larger ship appears on the map with pause-aware animation and reduced-motion
+support. Research bonuses apply to yard cargo ships only. Expeditions do not count
+as deliveries from salvage yards. Saves preserve every expedition phase; formats
+1–7 migrate with no vessel built, and legacy games without Salvage retain their
+original rules.
 
 ## Lighthouse specializations
 
@@ -288,7 +310,7 @@ benefits and costs, and cargo animation and ETA reflect navigation bonuses.
 
 The specialization milestone introduced format **6**, preserving specializations. Formats 1–5 migrate
 with empty slots; legacy games without Salvage keep their original rules and
-cannot buy specializations. Research now uses save format **7** and wire protocol **9**, as described below.
+cannot buy specializations. Research introduced save format **7** and wire protocol **9**; salvage vessels advance these to **8** and **10**.
 
 
 ## Research and ancient archives
@@ -323,11 +345,11 @@ the next tick. Expanded holds affect subsequent loading and do not create extra
 cargo in ships already sailing. Fuel, costs, previews, cargo animation, and ETA
 all reflect effective server rules.
 
-New saves use **format 7**, persisting completed technology IDs alongside the
+New saves use **format 8**, persisting completed technology IDs alongside the
 existing world. Loading formats 5–6 adds empty research to Salvage worlds and
 reveals archives already covered by exploration. Formats 1–4 and resaved worlds
 without Salvage retain their legacy gameplay with no research. Matching clients
-and servers use **wire protocol 9**. These rules supersede earlier version and
+and servers use **wire protocol 10**. These rules supersede earlier version and
 balance descriptions above where an upgrade applies.
 
 Use **Restart** beside Save and Load to start a fresh shared game. Confirming resets progress for every connected tab and keeps the existing save slot. When all scenario objectives are met, a victory notification appears. Choose **Continue playing** to dismiss it and keep managing the archipelago; the simulation continues after victory.

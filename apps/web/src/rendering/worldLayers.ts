@@ -78,5 +78,13 @@ export function buildWorldLayers(world: WorldState) {
       worldLayer.addChild(graphic);
       ships.push({graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && Math.hypot(from.position.x-to.position.x, from.position.y-to.position.y) <= from.radius+to.radius});
     }
+    const vessel = world.salvage?.vessel;
+    const route = world.salvage?.vessel_route;
+    if (vessel && route) {
+      const graphic = new Graphics().poly([22, 0, 10, -10, -16, -10, -20, -5, -20, 5, -16, 10, 10, 10]).fill(vessel.cargo ? 0xf3b45c : 0xadc7d7)
+        .stroke({ color: 0x081521, width: 2 }).rect(-9, -5, 12, 10).fill(0xeee5cc);
+      worldLayer.addChild(graphic);
+      ships.push({ graphic, from: route[0], to: route[1], offset: 0, vessel, travelSeconds: world.salvage!.rules.vessel.travel_seconds });
+    }
   return { worldLayer, ships };
 }

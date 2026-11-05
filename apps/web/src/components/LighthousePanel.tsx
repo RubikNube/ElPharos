@@ -1,6 +1,7 @@
 import type { WorldState } from '../protocol';
 import type { WorldStore } from '../state/worldStore';
 import type { WorldCommands } from '../network/commands';
+import { SalvageVesselPanel } from './SalvageVesselPanel';
 import { cargoStatus } from '../shipping';
 import { isDiscovered } from '../rendering/visibility';
 import { lighthouseSelection, facilityBlockedReason, isNetworkIlluminated, networkUpkeep } from '../state/worldQueries';
@@ -41,6 +42,7 @@ export function LighthousePanel({ world, selectedId, connection, commands, onSel
           <p className="hint">Fitting requires connected illumination and enough Salvage. Refitting replaces the current role.</p>
         </section>}
         {world.research?.catalog.some(t => t.island_id === island?.id && t.discovered) && <section aria-label="Island archive"><h3>Ancient archive</h3><p>Archive discovered. Its technologies are available in Research; knowledge survives darkness.</p></section>}
+        {island?.fuel_facility === 'haven' && <SalvageVesselPanel world={world} connected={connection === 'connected'} commands={commands} />}
         {yard && <section aria-label="Salvage yard"><h3>Salvage yard</h3><p>{yard.restored ? `Stock: ${yard.stock}/${world.salvage!.rules.local_capacity} · Produces 1 Salvage every ${yard.period}s while connected.` : `Ruined · Produces 1 Salvage every ${yard.period}s when restored and connected.`}</p>
           {!yard.restored && <><button disabled={connection !== 'connected' || !!facilityBlock || !world.salvage || world.salvage.reserve < world.salvage.rules.restore_cost} onClick={() => commands.restoreSalvageYard(yard.island_id)}>Restore salvage yard — {world.salvage!.rules.restore_fuel} fuel + {world.salvage!.rules.restore_cost} Salvage</button><p>{facilityBlock ?? (world.salvage!.reserve < world.salvage!.rules.restore_cost ? 'Not enough Salvage.' : 'Includes an automatic cargo ship.')}</p></>}
           {ship && <p role="status">Cargo: {ship.cargo}/{world.salvage!.rules.hold} · {cargoStatus(world, ship)}</p>}

@@ -20,7 +20,8 @@ export function researchWorldFixture(): WorldState {
     research: researchFixture(),
     economy: { fuel: 300, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false },
     salvage: {
-      rules: { specialization_cost: 40, refit_cost: 20, efficiency_saving: 0.5, navigation_multiplier: 1.5, capacity: 300, expand_cost: 20, restore_cost: 40, restore_fuel: 120, speed: 60, hold: 20, local_capacity: 60, haven_period: 10 },
+      vessel: null, vessel_route: null,
+      rules: { vessel: { build_fuel: 200, trip_fuel: 120, fuel_reserve: 120, hold: 40, travel_seconds: 5, salvage_period: 2 }, specialization_cost: 40, refit_cost: 20, efficiency_saving: 0.5, navigation_multiplier: 1.5, capacity: 300, expand_cost: 20, restore_cost: 40, restore_fuel: 120, speed: 60, hold: 20, local_capacity: 60, haven_period: 10 },
       reserve: 100, haven_timer: 0, yards: [], ships: [],
     },
     objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650,
