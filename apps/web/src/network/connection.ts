@@ -6,6 +6,7 @@ export function connectWorld() {
   let socket: WebSocket | null = null;
   let stopped = false;
   let attempt = 0;
+  let objectiveComplete = false;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let deadline: ReturnType<typeof setTimeout> | undefined;
   const url = new URL('/ws', window.location.href);
@@ -26,7 +27,7 @@ export function connectWorld() {
         if (message.type === 'command_result') {
           const pending = useWorldStore.getState().pending;
           if (pending?.id === message.request_id) useWorldStore.setState({
-            pending: null, notice: message.success ? (pending.action === 'save_game' ? 'World saved.' : 'World loaded.') : null,
+            pending: null, notice: message.success ? ({ save_game: 'World saved.', load_game: 'World loaded.', restart_game: 'New game started.' }[pending.action] ?? message.message) : null,
             error: message.success ? null : message.message,
           });
           return;
@@ -38,7 +39,9 @@ export function connectWorld() {
         clearTimeout(deadline);
         attempt = 0;
         const selected = message.world.lighthouses.find(light => light.id === useWorldStore.getState().selectedId && isDiscovered(message.world, light.position));
-        useWorldStore.setState({ selectedId: selected?.id ?? null, world: message.world, connection: 'connected' });
+        const victoryNotice = message.world.objective_complete && (!objectiveComplete || useWorldStore.getState().victoryNotice);
+        objectiveComplete = message.world.objective_complete;
+        useWorldStore.setState({ selectedId: selected?.id ?? null, world: message.world, connection: 'connected', victoryNotice });
       } catch {
         useWorldStore.setState({ error: 'Received an incompatible world. Check that client and server versions match.' });
         current.close(4002, 'Invalid server message');
@@ -51,7 +54,7 @@ export function connectWorld() {
       if (stopped || current !== socket) return;
       clearTimeout(deadline);
       const interrupted = useWorldStore.getState().pending;
-      useWorldStore.setState({ world: null, connection: 'reconnecting', pending: null, notice: interrupted ? 'Connection lost. Save/load outcome is unknown; reconnect before retrying.' : null });
+      useWorldStore.setState({ world: null, connection: 'reconnecting', pending: null, notice: interrupted ? 'Connection lost. Command outcome is unknown; reconnect before retrying.' : null });
       retry = setTimeout(connect, Math.min(1000 * 2 ** Math.min(attempt++, 4), 10000));
     };
   }
@@ -72,7 +75,7 @@ export function connectWorld() {
         socket.onmessage = socket.onerror = socket.onclose = null;
         socket.close();
       }
-      useWorldStore.setState({ world: null, connection: 'offline', error: null, pending: null, notice: null });
+      useWorldStore.setState({ world: null, connection: 'offline', error: null, pending: null, notice: null, victoryNotice: false });
     },
   };
 }

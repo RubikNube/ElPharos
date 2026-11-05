@@ -314,4 +314,25 @@ test('real server: snapshots, validation, mutations, broadcast, reconnect', { ti
   const researchLoaded = await until(restarted, w => w.revision > winner.revision);
   assert.deepEqual(researchLoaded.research, winner.research);
 
+  // Restart broadcasts a fresh running game and preserves the save slot.
+  const beforeRestartSave = await readFile(savePath, 'utf8');
+  restarted.socket.send(JSON.stringify({ type: 'restart_game', protocol_version: 9, request_id: 'new-game' }));
+  for (;;) {
+    const msg = await restarted.next();
+    if (msg.type === 'command_result') {
+      assert.equal(msg.request_id, 'new-game');
+      assert.equal(msg.success, true);
+      break;
+    }
+  }
+  const fresh = await until(restarted, w => w.revision > researchLoaded.revision);
+  assert.equal(fresh.revision, researchLoaded.revision + 1);
+  assert.equal(fresh.economy.elapsed_seconds, 0);
+  assert.equal(fresh.economy.paused, false);
+  assert.equal(fresh.economy.fuel, 300);
+  assert.equal(fresh.objective_complete, false);
+  assert.deepEqual(fresh.research.completed, []);
+  assert.deepEqual(await until(observer, w => w.revision >= fresh.revision), fresh);
+  assert.equal(await readFile(savePath, 'utf8'), beforeRestartSave);
+
 });

@@ -113,6 +113,19 @@ impl GameService {
             ClientMessage::SaveGame { .. } => {
                 persistence::save(&state.save_path, &state.world.borrow())
             }
+            ClientMessage::RestartGame { .. } => {
+                let revision = state.world.borrow().next_revision().map_err(String::from);
+                revision.map(|revision| {
+                    let fresh = WorldState {
+                        revision,
+                        ..WorldState::default()
+                    };
+                    clock.last_tick = Some(Instant::now());
+                    state.world.send_replace(fresh);
+                    changed = true;
+                    state.wake.notify_one();
+                })
+            }
             ClientMessage::LoadGame { .. } => {
                 persistence::load(&state.save_path).and_then(|mut loaded| {
                     loaded.revision = state.world.borrow().next_revision()?;
@@ -224,8 +237,11 @@ mod simulation_tests {
                 sessions: 2,
                 last_tick: Some(now),
             }),
-            save_path: std::env::temp_dir()
-                .join(format!("el-pharos-clock-{}.json", std::process::id())),
+            save_path: std::env::temp_dir().join(format!(
+                "el-pharos-clock-{}-{:?}.json",
+                std::process::id(),
+                std::thread::current().id()
+            )),
         })
     }
     #[test]
@@ -268,6 +284,54 @@ mod simulation_tests {
         assert_eq!(s.world.borrow().economy.elapsed_seconds, 2);
         s.advance(now + Duration::from_secs(201));
         assert_eq!(s.world.borrow().economy.elapsed_seconds, 3);
+    }
+    #[test]
+    fn restart_resets_the_shared_world_and_clock_without_overwriting_save() {
+        let s = state(Instant::now());
+        s.execute(ClientMessage::ExpandLighthouseRadius {
+            protocol_version: VERSION,
+            lighthouse_id: "beacon-1".into(),
+        })
+        .result
+        .unwrap();
+        s.execute(ClientMessage::SaveGame {
+            protocol_version: VERSION,
+            request_id: "save".into(),
+        })
+        .result
+        .unwrap();
+        let saved = std::fs::read(&s.save_path).unwrap();
+        s.execute(ClientMessage::SetSimulationPaused {
+            protocol_version: VERSION,
+            paused: true,
+        })
+        .result
+        .unwrap();
+        let mut observer = s.subscribe();
+        let revision = observer.borrow_and_update().revision;
+        let result = s.execute(ClientMessage::RestartGame {
+            protocol_version: VERSION,
+            request_id: "restart".into(),
+        });
+        assert!(result.result.is_ok());
+        assert!(result.changed);
+        assert_eq!(result.request_id.as_deref(), Some("restart"));
+        assert!(observer.has_changed().unwrap());
+        let expected = WorldState {
+            revision: revision + 1,
+            ..WorldState::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&*observer.borrow()).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
+        assert_eq!(std::fs::read(&s.save_path).unwrap(), saved);
+        let restarted_at = s.gate.lock().unwrap().last_tick.unwrap();
+        s.advance(restarted_at + Duration::from_millis(999));
+        assert_eq!(s.world.borrow().economy.elapsed_seconds, 0);
+        s.advance(restarted_at + Duration::from_secs(1));
+        assert_eq!(s.world.borrow().economy.elapsed_seconds, 1);
+        std::fs::remove_file(&s.save_path).unwrap();
     }
     #[test]
     fn persistence_and_ticks_share_the_gate() {

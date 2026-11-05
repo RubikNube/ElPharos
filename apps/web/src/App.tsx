@@ -9,7 +9,7 @@ import { useWorldClient } from './network/useWorldClient';
 import { useWorldStore } from './state/worldStore';
 
 export function App() {
-  const { world, connection, error, selectedId, pending, notice } = useWorldStore();
+  const { world, connection, error, selectedId, pending, notice, victoryNotice } = useWorldStore();
   const commands = useWorldClient();
 
   return <main className="app">
@@ -21,6 +21,10 @@ export function App() {
       </div>}
       <span className={`connection ${connection}`} role="status">{connection === 'connected' ? 'World connected' : connection === 'reconnecting' ? 'Reconnecting…' : 'Connecting…'}</span>
     </header>
+    {world && victoryNotice && <section className="victory-notice" aria-label="Victory notification">
+      <div role="status"><strong>Archipelago restored — you won!</strong><p>All win conditions are met. You can keep exploring and managing your lights.</p></div>
+      <button onClick={() => useWorldStore.setState({ victoryNotice: false })}>Continue playing</button>
+    </section>}
     <div className="workspace"><WorldMap /><aside>
       {world?.economy.blackout && <p role="status" className="error">Fuel shortage extinguished every beacon. First Haven still produces 2 fuel/s; relight the network when fuel is available.</p>}
       {world && <ObjectivePanel world={world} />}

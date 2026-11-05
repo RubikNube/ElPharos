@@ -319,3 +319,5 @@ reveals archives already covered by exploration. Formats 1–4 and resaved world
 without Salvage retain their legacy gameplay with no research. Matching clients
 and servers use **wire protocol 9**. These rules supersede earlier version and
 balance descriptions above where an upgrade applies.
+
+Use **Restart** beside Save and Load to start a fresh shared game. Confirming resets progress for every connected tab and keeps the existing save slot. When all scenario objectives are met, a victory notification appears. Choose **Continue playing** to dismiss it and keep managing the archipelago; the simulation continues after victory.

@@ -16,7 +16,7 @@ class FakeSocket {
   close = vi.fn(() => { this.readyState = 3; this.onclose?.(); });
   constructor(readonly url: URL) { FakeSocket.instances.push(this); }
   message(value: unknown) { this.onmessage?.({ data: JSON.stringify(value) }); }
-  snapshot() { this.message({ type: 'world_snapshot', protocol_version: PROTOCOL_VERSION, world: researchWorldFixture() }); }
+  snapshot(objective_complete = false) { this.message({ type: 'world_snapshot', protocol_version: PROTOCOL_VERSION, world: { ...researchWorldFixture(), objective_complete } }); }
 }
 
 let client: ReturnType<typeof connectWorld>;
@@ -103,4 +103,32 @@ it('ignores stale socket events and clears timers and pending state on disposal'
   expect(useWorldStore.getState().connection).toBe('offline');
   expect(vi.getTimerCount()).toBe(0);
   expect(current.onmessage).toBeNull();
+});
+
+it('announces victory once, allows continued play, and announces a later victory after restart', () => {
+  const socket = FakeSocket.instances[0];
+  socket.snapshot();
+  expect(useWorldStore.getState().victoryNotice).toBe(false);
+  socket.snapshot(true);
+  expect(useWorldStore.getState().victoryNotice).toBe(true);
+  useWorldStore.setState({ victoryNotice: false });
+  socket.snapshot(true);
+  expect(useWorldStore.getState().victoryNotice).toBe(false);
+  worldCommands(client.send).setLighthouseActive('beacon-1', false);
+  expect(JSON.parse(socket.send.mock.calls.at(-1)![0]).type).toBe('set_lighthouse_active');
+  socket.close();
+  vi.advanceTimersByTime(1000);
+  const reconnected = FakeSocket.instances[1];
+  reconnected.snapshot(true);
+  expect(useWorldStore.getState().victoryNotice).toBe(false);
+  worldCommands(client.send).restart();
+  const request = JSON.parse(reconnected.send.mock.calls.at(-1)![0]);
+  expect(request.type).toBe('restart_game');
+  expect(useWorldStore.getState().pending?.id).toBe(request.request_id);
+  reconnected.message({ type: 'command_result', protocol_version: PROTOCOL_VERSION, request_id: request.request_id, success: true, message: 'Done' });
+  reconnected.snapshot();
+  expect(useWorldStore.getState().notice).toBe('New game started.');
+  expect(useWorldStore.getState().victoryNotice).toBe(false);
+  reconnected.snapshot(true);
+  expect(useWorldStore.getState().victoryNotice).toBe(true);
 });

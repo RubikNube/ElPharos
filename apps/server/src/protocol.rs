@@ -35,6 +35,10 @@ pub enum ClientMessage {
         protocol_version: u8,
         request_id: String,
     },
+    RestartGame {
+        protocol_version: u8,
+        request_id: String,
+    },
     ExpandLighthouseRadius {
         protocol_version: u8,
         lighthouse_id: String,
@@ -75,6 +79,9 @@ impl ClientMessage {
             }
             | ClientMessage::LoadGame {
                 protocol_version, ..
+            }
+            | ClientMessage::RestartGame {
+                protocol_version, ..
             } => *protocol_version,
         }
     }
@@ -82,7 +89,8 @@ impl ClientMessage {
     pub fn request_id(&self) -> Option<String> {
         match self {
             ClientMessage::SaveGame { request_id, .. }
-            | ClientMessage::LoadGame { request_id, .. } => Some(request_id.clone()),
+            | ClientMessage::LoadGame { request_id, .. }
+            | ClientMessage::RestartGame { request_id, .. } => Some(request_id.clone()),
             _ => None,
         }
     }

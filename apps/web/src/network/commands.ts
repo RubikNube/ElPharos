@@ -11,6 +11,7 @@ export function worldCommands(send: (message: ClientMessage) => void) {
     restoreFuelFacility: (island_id: string) => send({ type: 'restore_fuel_facility', protocol_version: PROTOCOL_VERSION, island_id }),
     save: () => send({ type: 'save_game', protocol_version: PROTOCOL_VERSION, request_id: crypto.randomUUID() }),
     load: () => send({ type: 'load_game', protocol_version: PROTOCOL_VERSION, request_id: crypto.randomUUID() }),
+    restart: () => send({ type: 'restart_game', protocol_version: PROTOCOL_VERSION, request_id: crypto.randomUUID() }),
   };
 }
 
