@@ -104,6 +104,8 @@ impl Default for Economy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
+    #[serde(default)]
+    pub veil: Option<crate::veil::Veil>,
     pub doctor: Option<crate::health::DoctorVoyage>,
     #[serde(default)]
     pub voyages: crate::voyages::VoyageTraffic,
@@ -281,6 +283,7 @@ impl WorldState {
         } else {
             e.fuel -= upkeep;
         }
+        self.tick_veil();
         self.tick_salvage();
         self.tick_salvage_vessel();
         self.tick_voyages();
@@ -385,6 +388,7 @@ impl WorldState {
 #[cfg(test)]
 fn legacy_world() -> WorldState {
     let mut w = WorldState {
+        veil: None,
         salvage: None,
         research: None,
         ..crate::scenario::fixed_world()

@@ -69,6 +69,20 @@ it('renders an ambient voyage on both copies of a seam crossing', () => {
   expect(ships.map(ship => [ship.from.x, ship.to.x])).toEqual([[10, -10], [1010, 990]]);
 });
 
+it('draws the Veil warning on each visible copy across the seam', () => {
+  const world = researchWorldFixture();
+  world.width = 1000; world.height = 1000;
+  world.lighthouses = [{
+    id: 'target', island_id: 'remote', name: 'Target', position: { x: 10, y: 500 },
+    radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true,
+    sick: false, immune_until: 300, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
+  }];
+  world.veil!.target = 'target'; world.veil!.approach_remaining = 60;
+  const drawn = buildWorldLayers(world, 'ships').shipLayer.children as unknown as { circles: number[][] }[];
+  expect(drawn.flatMap(graphic => graphic.circles.map(([x]) => x))).toContain(10);
+  expect(drawn.flatMap(graphic => graphic.circles.map(([x]) => x))).toContain(1010);
+});
+
 it('separates static and dynamic passes and invalidates visible terrain changes', () => {
   const world = researchWorldFixture();
   world.islands = [{ id: 'haven', name: 'Haven', position: { x: 100, y: 100 }, radius: 50, fuel_facility: 'haven', fuel_production: 2 }];

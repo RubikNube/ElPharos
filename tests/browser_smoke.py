@@ -84,6 +84,41 @@ try:
     time.sleep(.2)
     js("document.querySelector('.pause').click()")
     time.sleep(.2)
+    # An older save gains a Veil front; warding and a strike use real controls.
+    veil_fixture = json.loads(pristine)
+    veil_fixture['world']['economy']['paused'] = False
+    veil_fixture['world']['lighthouses'][4].update(active=True, explored_radius=290)
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(veil_fixture))
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    for _ in range(50):
+        if js("return document.querySelector('[aria-label=\"Veil objective\"]')?.innerText.includes('Front arrives')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Veil front did not appear')
+    js("Array.from(document.querySelectorAll('nav[aria-label=Lighthouses] button')).find(b => b.textContent.includes('Wreckers')).click()")
+    assert js("return document.querySelector('[aria-label=\"Veil warning\"]').innerText.includes('Ward beacon — 40 fuel')")
+    screenshot('veil-front')
+    js("document.querySelector('[aria-label=\"Veil warning\"] button').click()")
+    time.sleep(.2)
+    assert js("return document.querySelector('[aria-label=\"Veil warning\"]').innerText.includes('Ward active')")
+    js("document.querySelector('.pause').click()")
+    js("document.querySelector('.save-controls button').click()")
+    time.sleep(.2)
+    veil_saved = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
+    assert veil_saved['save_version'] == 11 and veil_saved['world']['veil']['ward_remaining'] > 0
+    veil_saved['world']['veil'].update(approach_remaining=1, ward_remaining=0)
+    veil_saved['world']['economy']['paused'] = False
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(veil_saved))
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    for _ in range(50):
+        if js("return document.querySelector('h2').innerText.includes('Wreckers') && document.body.innerText.includes('Beacon extinguished')"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Veil strike did not extinguish the beacon')
+    js("document.querySelector('.primary').click()")
+    time.sleep(.2)
+    assert js("return document.body.innerText.includes('Beacon illuminated')")
+    Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(pristine)
+    js("document.querySelectorAll('.save-controls button')[1].click()")
+    time.sleep(.2)
     # Treat a sick, isolated keeper through the actual panel and animate both legs.
     doctor_fixture = json.loads(pristine)
     doctor_fixture['save_version'] = 9
@@ -144,7 +179,7 @@ try:
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.2)
     vessel_saved = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
-    assert vessel_saved['save_version'] == 10
+    assert vessel_saved['save_version'] == 11
     assert vessel_saved['world']['salvage']['vessel']['phase'] == 'outbound'
     vessel_saved['world']['salvage']['vessel'].update(phase='returning', timer=4, cargo=40, enabled=False)
     vessel_saved['world']['economy']['paused'] = False
@@ -404,7 +439,10 @@ try:
         else: raise RuntimeError('Restoration remained unaffordable')
         js("document.querySelector('.fuel-facility button').click()")
         time.sleep(.15)
-    assert js("return document.querySelector('.objective h3').innerText === 'Archipelago restored'")
+    for _ in range(30):
+        if js("return document.querySelector('.objective h3').innerText === 'Archipelago restored'"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Scenario incomplete: ' + js("return document.querySelector('.objective').innerText"))
     assert js("return document.querySelector('.resource.fuel').title.includes('Production: +11/s')")
     screenshot('complete-network')
     # Losing and restoring the anchor updates the objective and production.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 
 const point = z.object({ x: z.number(), y: z.number() });
 const island = z.object({
@@ -36,6 +36,7 @@ export const vesselRulesSchema = z.object({
 });
 const vesselSchema = z.object({ enabled: z.boolean(), phase: z.enum(['docked', 'outbound', 'searching', 'returning']), timer: z.number().int().nonnegative(), cargo: z.number().int().nonnegative() });
 export const worldSchema = z.object({
+  veil: z.object({ target: z.string().min(1).nullable(), approach_remaining: z.number().int().min(0).max(60), cooldown_remaining: z.number().int().min(0).max(120), ward_remaining: z.number().int().min(0).max(90), defended: z.number().int().min(0).max(3), next_target_index: z.number().int().nonnegative(), ward_fuel: z.literal(40), complete: z.boolean() }).nullable(),
   voyages: z.object({ next_id: z.number().int().positive(), spawn_in: z.number().int().min(0).max(60), ships: z.array(z.object({ id: z.number().int().positive(), kind: z.enum(['family', 'mail']), message_id: z.number().int().min(0).max(5), origin: z.string(), destination: z.string(), from: z.string(), to: z.string(), progress: z.number().min(0).lt(1), phase: z.enum(['outbound', 'visiting', 'returning']), visit_timer: z.number().int().min(0).max(5) })).max(2) }),
   doctor: z.object({ destination: z.string().min(1), returning: z.boolean(), progress: z.number().min(0).lt(1) }).nullable(),
   doctor_rules: z.object({ trip_fuel: z.literal(40), speed: z.literal(120) }),
@@ -52,6 +53,7 @@ export const worldSchema = z.object({
   width: z.number().positive(), height: z.number().positive(),
   islands: z.array(island.extend({ fuel_facility: z.enum(['haven', 'ruined', 'restored', 'none']), fuel_production: z.union([z.literal(0), z.literal(2), z.literal(3), z.literal(4)]) })), lighthouses: z.array(lighthouse),
 }).superRefine((world, ctx) => {
+  if ((world.veil === null) !== (world.salvage === null) || (world.veil && (world.veil.complete !== (world.veil.defended === 3) || (world.lighthouses.length > 0 && world.veil.next_target_index >= world.lighthouses.length) || (world.veil.target === null ? world.veil.approach_remaining !== 0 || world.veil.ward_remaining !== 0 : world.veil.approach_remaining === 0 || world.veil.cooldown_remaining !== 0 || !world.lighthouses.some(l => l.id === world.veil!.target))))) ctx.addIssue({ code: 'custom', message: 'Invalid Veil state' });
   for (const light of world.lighthouses) {
     if (light.effective_radius !== light.radius * (light.sick ? 0.75 : 1) || light.explored_radius > light.radius || (light.active && light.explored_radius < light.effective_radius)) ctx.addIssue({ code: 'custom', message: 'Invalid effective radius or exploration' });
   }
@@ -77,6 +79,6 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), protocol_version: z.literal(PROTOCOL_VERSION), message: z.string() }),
 ]);
 export type WorldState = z.infer<typeof worldSchema>;
-export type ClientMessage = { type: 'send_doctor'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | { type: 'build_salvage_vessel'; protocol_version: typeof PROTOCOL_VERSION } | { type: 'set_salvage_vessel_enabled'; protocol_version: typeof PROTOCOL_VERSION; enabled: boolean } | { type: 'research_technology'; protocol_version: typeof PROTOCOL_VERSION; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'set_simulation_paused'; protocol_version: typeof PROTOCOL_VERSION; paused: boolean } | { type: 'save_game' | 'load_game' | 'restart_game'; protocol_version: typeof PROTOCOL_VERSION; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | {
+export type ClientMessage = { type: 'ward_veil_target'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | { type: 'send_doctor'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | { type: 'build_salvage_vessel'; protocol_version: typeof PROTOCOL_VERSION } | { type: 'set_salvage_vessel_enabled'; protocol_version: typeof PROTOCOL_VERSION; enabled: boolean } | { type: 'research_technology'; protocol_version: typeof PROTOCOL_VERSION; technology_id: TechnologyId } | { type: 'set_lighthouse_specialization'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; specialization: 'efficient_lamp' | 'navigation_beacon' } | { type: 'restore_salvage_yard'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'restore_fuel_facility'; protocol_version: typeof PROTOCOL_VERSION; island_id: string } | { type: 'set_simulation_paused'; protocol_version: typeof PROTOCOL_VERSION; paused: boolean } | { type: 'save_game' | 'load_game' | 'restart_game'; protocol_version: typeof PROTOCOL_VERSION; request_id: string } | { type: 'expand_lighthouse_radius'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string } | {
   type: 'set_lighthouse_active'; protocol_version: typeof PROTOCOL_VERSION; lighthouse_id: string; active: boolean;
 };

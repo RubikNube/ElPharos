@@ -5,15 +5,15 @@ import { serverMessageSchema, worldSchema } from './protocol';
 
 it('rejects incompatible protocol versions and invalid geometry', () => {
   expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 119, message: 'test' }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 13, world: {
+  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 14, world: {
     research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: -1, height: 100, islands: [], lighthouses: [],
   } }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 13, message: 'Unknown lighthouse' }).success).toBe(true);
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 14, message: 'Unknown lighthouse' }).success).toBe(true);
 });
 
 it('validates fuel and simulation state from the authoritative snapshot', () => {
   const economy = { fuel: 300, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false };
-  const world = { doctor: null, voyages: { next_id: 1, spawn_in: 30, ships: [] }, doctor_rules: { trip_fuel: 40, speed: 120 }, economy, research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: 100, height: 100, radius_step: 60, radius_max: 650, islands: [], lighthouses: [] };
+  const world = { veil: null, doctor: null, voyages: { next_id: 1, spawn_in: 30, ships: [] }, doctor_rules: { trip_fuel: 40, speed: 120 }, economy, research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: 100, height: 100, radius_step: 60, radius_max: 650, islands: [], lighthouses: [] };
   expect(worldSchema.safeParse(world).success).toBe(true);
   for (const fuel of [0, 1.25, 42.5, 599.75, 600]) {
     expect(worldSchema.safeParse({ ...world, economy: { ...economy, fuel } }).success).toBe(true);
@@ -32,7 +32,7 @@ it('validates fuel and simulation state from the authoritative snapshot', () => 
 });
 
 it('validates facility snapshots and variable production', () => {
-  const world = { doctor: null, voyages: { next_id: 1, spawn_in: 30, ships: [] }, doctor_rules: { trip_fuel: 40, speed: 120 },
+  const world = { veil: null, doctor: null, voyages: { next_id: 1, spawn_in: 30, ships: [] }, doctor_rules: { trip_fuel: 40, speed: 120 },
     economy: { fuel: 180, capacity: 600, production: 5, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false },
     research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650,
     islands: [{ id: 'island-2', name: 'Amber Shoal', position: { x: 1250, y: 650 }, radius: 90, fuel_facility: 'restored', fuel_production: 3 }], lighthouses: [],
@@ -48,7 +48,7 @@ it('validates facility snapshots and variable production', () => {
 });
 
 it('validates authoritative cargo and Salvage rules', () => {
-  const base = { doctor: null, voyages: { next_id: 1, spawn_in: 30, ships: [] }, doctor_rules: { trip_fuel: 40, speed: 120 },
+  const base = { veil: { target: null, approach_remaining: 0, cooldown_remaining: 0, ward_remaining: 0, defended: 0, next_target_index: 0, ward_fuel: 40, complete: false }, doctor: null, voyages: { next_id: 1, spawn_in: 30, ships: [] }, doctor_rules: { trip_fuel: 40, speed: 120 },
     research: researchFixture(),
     economy: { fuel: 180, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 1, paused: false, blackout: false },
     objective_complete: false, shipping_links: [], revision: 1, width: 2400, height: 1000, radius_step: 60, radius_max: 650, islands: [], lighthouses: [],

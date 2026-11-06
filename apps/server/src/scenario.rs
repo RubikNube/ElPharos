@@ -83,6 +83,7 @@ fn generate(rng: &mut StdRng, count: usize, jitter: f64) -> WorldState {
         point.y += 310.0 - min_y;
     }
     let mut world = WorldState {
+        veil: Some(crate::veil::Veil::default()),
         doctor: None,
         voyages: crate::voyages::VoyageTraffic::default(),
         research: Some(crate::research::Research::default()),
@@ -248,7 +249,10 @@ fn playable(world: &WorldState) -> bool {
 
 #[cfg(test)]
 pub(crate) fn fixed_world() -> WorldState {
-    serde_json::from_str(include_str!("../../../tests/fixtures/fixed-world.json")).unwrap()
+    let mut world: WorldState =
+        serde_json::from_str(include_str!("../../../tests/fixtures/fixed-world.json")).unwrap();
+    world.veil = Some(crate::veil::Veil::default());
+    world
 }
 
 #[cfg(test)]

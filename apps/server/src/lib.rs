@@ -10,6 +10,7 @@ pub mod salvage;
 mod scenario;
 mod service;
 mod validation;
+pub mod veil;
 pub mod vessel;
 pub mod voyages;
 

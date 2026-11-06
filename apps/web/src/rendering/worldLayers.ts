@@ -73,6 +73,17 @@ export function buildWorldLayers(world: WorldState, pass: 'all' | 'terrain' | 's
       Math.max(from.y, to.y) >= -24 && Math.min(from.y, to.y) <= world.height+24;
     for (let ix = -2; ix <= 2; ix++) for (let iy = -2; iy <= 2; iy++) {
       const shifted = (point: { x: number; y: number }) => ({ x: point.x+ix*world.width, y: point.y+iy*world.height });
+      if (pass !== 'terrain' && world.veil?.target) {
+        const target = world.lighthouses.find(light => light.id === world.veil?.target);
+        if (target) {
+          const point = shifted(target.position);
+          const radius = 56 + world.veil.approach_remaining * 3;
+          if (point.x >= -radius && point.x <= world.width + radius && point.y >= -radius && point.y <= world.height + radius) {
+            shipLayer.addChild(new Graphics().circle(point.x, point.y, radius).fill({ color: 0x713f82, alpha: 0.12 })
+              .circle(point.x, point.y, radius).stroke({ color: world.veil.ward_remaining > 0 ? 0x8fe2c2 : 0xc48fe1, alpha: 0.9, width: 4 }));
+          }
+        }
+      }
       // Server-owned links always lie inside the union of connected light circles.
       for (const [index, link] of world.shipping_links.entries()) {
         const source = world.lighthouses.find(light => light.id === link.from);

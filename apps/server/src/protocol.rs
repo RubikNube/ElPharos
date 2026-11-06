@@ -1,11 +1,15 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 13;
+pub const VERSION: u8 = 14;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    WardVeilTarget {
+        protocol_version: u8,
+        lighthouse_id: String,
+    },
     SendDoctor {
         protocol_version: u8,
         lighthouse_id: String,
@@ -64,7 +68,10 @@ pub enum ClientMessage {
 impl ClientMessage {
     pub fn version(&self) -> u8 {
         match self {
-            ClientMessage::SendDoctor {
+            ClientMessage::WardVeilTarget {
+                protocol_version, ..
+            }
+            | ClientMessage::SendDoctor {
                 protocol_version, ..
             }
             | ClientMessage::BuildSalvageVessel { protocol_version }
@@ -165,6 +172,7 @@ fn serialize_snapshot<S: serde::Serializer>(
     }
     #[derive(Serialize)]
     struct Snapshot<'a> {
+        veil: Option<VeilSnapshot<'a>>,
         doctor: &'a Option<crate::health::DoctorVoyage>,
         voyages: &'a crate::voyages::VoyageTraffic,
         doctor_rules: crate::health::DoctorRules,
@@ -186,6 +194,13 @@ fn serialize_snapshot<S: serde::Serializer>(
         from: &'a str,
         to: &'a str,
     }
+    #[derive(Serialize)]
+    struct VeilSnapshot<'a> {
+        #[serde(flatten)]
+        state: &'a crate::veil::Veil,
+        ward_fuel: u32,
+        complete: bool,
+    }
     let network = crate::network::NetworkView::new(world);
     let connected = &network.connected;
     let shipping_links = network
@@ -197,6 +212,11 @@ fn serialize_snapshot<S: serde::Serializer>(
         })
         .collect();
     Snapshot {
+        veil: world.veil.as_ref().map(|state| VeilSnapshot {
+            state,
+            ward_fuel: crate::veil::WARD_FUEL,
+            complete: state.complete(),
+        }),
         doctor: &world.doctor,
         voyages: &world.voyages,
         doctor_rules: crate::health::DoctorRules::default(),
@@ -281,6 +301,7 @@ mod tests {
     #[test]
     fn snapshots_derive_links_production_and_objective_without_persisting_them() {
         let mut world = WorldState {
+            veil: None,
             salvage: None,
             research: None,
             ..crate::scenario::fixed_world()

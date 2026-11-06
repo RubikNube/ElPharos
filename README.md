@@ -105,9 +105,9 @@ automatically. The side panel shows fuel, rates, pause status, and shortage feed
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
 preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
-New saves use format 10 and persist keeper health, doctor voyages, ambient shipping voyages, facilities, Salvage, specializations, salvage vessels, and
-research rather than derived production. Save formats 1–9 remain supported.
-Wire protocol 13 requires matching client and server versions.
+New saves use format 11 and persist Veil fronts, keeper health, doctor voyages, ambient shipping voyages, facilities, Salvage, specializations, salvage vessels, and
+research rather than derived production. Save formats 1–10 remain supported.
+Wire protocol 14 requires matching client and server versions.
 
 ## Connected shipping and scenario goal
 
@@ -280,7 +280,7 @@ as well as restoring every fuel facility and connecting all beacons
 with sustainable fuel. Production timers and cargo in transit are saved.
 Formats 1–4 retain their original map, free expansion, and objective under a
 legacy ruleset, which remains in effect after saving again. Current saves use
-format 10 and matching clients and servers use wire protocol 13. The older sections
+format 11 and matching clients and servers use wire protocol 14. The older sections
 above describe the original four-island scenario; these rules supersede them for
 new games. Base Salvage constants live in `apps/server/src/salvage.rs`;
 `apps/server/src/rules.rs` collects effective rules for simulation and snapshots.
@@ -360,11 +360,11 @@ the next tick. Expanded holds affect subsequent loading and do not create extra
 cargo in ships already sailing. Fuel, costs, previews, cargo animation, and ETA
 all reflect effective server rules.
 
-New saves use **format 10**, persisting keeper health, doctor voyages, and ambient shipping voyages alongside completed technology IDs and the
+New saves use **format 11**, persisting Veil fronts, keeper health, doctor voyages, and ambient shipping voyages alongside completed technology IDs and the
 existing world. Loading formats 5–6 adds empty research to Salvage worlds and
 reveals archives already covered by exploration. Formats 1–4 and resaved worlds
 without Salvage retain their legacy gameplay with no research. Matching clients
-and servers use **wire protocol 13**. These rules supersede earlier version and
+and servers use **wire protocol 14**. These rules supersede earlier version and
 balance descriptions above where an upgrade applies.
 
 Use **Restart** beside Save and Load to start a fresh shared game. Confirming resets progress for every connected tab and keeps the existing save slot. When all scenario objectives are met, a victory notification appears. Choose **Continue playing** to dismiss it and keep managing the archipelago; the simulation continues after victory.
@@ -387,3 +387,20 @@ advance only with simulation time; saves preserve their state.
 
 Keeper health introduces **save format 9** and **wire protocol 12**. Older saves
 load with healthy keepers, five minutes of immunity, and an idle doctor ship.
+
+## Veil fronts
+
+After a remote beacon joins First Haven's connected network, the Veil periodically
+targets an active, connected remote beacon. A purple ring closes around the target
+for 60 simulation seconds. Select that lighthouse to **Ward beacon** for 40 fuel;
+the ward lasts 90 simulation seconds and works while paused. A defended strike
+requires the target to remain active and connected at impact. Without a defense,
+the strike extinguishes it, stopping any dependent production and shipping until
+you relight it. Exploration is retained. The next front waits 120 simulation
+seconds after impact and rotates among eligible targets.
+
+Defending three fronts completes a separate, permanent Veil objective. Fronts
+continue after completion. Veil timers freeze with the shared simulation pause
+or when all players disconnect. The current front, ward, and progress survive
+save/load; Restart starts fresh. Legacy worlds without Salvage retain their
+original rules. This milestone uses save format **11** and wire protocol **14**.

@@ -490,6 +490,8 @@ mod tests {
         for (salvage_first, researched) in [(false, false), (true, false), (false, true)] {
             let mut w = crate::scenario::fixed_world();
             // This strategy test isolates the economy from random illness.
+            // The separate Veil encounter is covered by its own playthrough tests.
+            w.veil = None;
             for light in &mut w.lighthouses {
                 light.immune_until = crate::domain::MAX_SAFE_INTEGER;
             }
@@ -565,6 +567,7 @@ mod tests {
             } else {
                 assert!(w.research.as_ref().unwrap().completed.is_empty());
             }
+            w.veil = Some(crate::veil::Veil::default());
             crate::persistence::validate(&w).unwrap();
         }
     }

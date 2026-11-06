@@ -20,6 +20,12 @@ export function LighthousePanel({ world, selectedId, connection, commands, onSel
       <nav aria-label="Lighthouses">{world.lighthouses.filter(light => isDiscovered(world, light.position)).map(light => <button key={light.id} aria-pressed={selectedId === light.id} onClick={() => onSelect(light.id)}>{light.name}{light.sick && ' · Sick'}</button>)}</nav>
       <p className="intro">Bring light to a quiet corner of the ocean.</p>
       {lighthouse && <>
+        {world.veil?.target === lighthouse.id && <section aria-label="Veil warning" role="status">
+          <h3>Veil front approaching</h3>
+          <p>Strike in {world.veil.approach_remaining}s. An unprotected strike will extinguish this beacon.</p>
+          <p>{world.veil.ward_remaining > 0 ? `Ward active for ${world.veil.ward_remaining}s.` : `Ward costs ${world.veil.ward_fuel} fuel.`}</p>
+          <button disabled={connection !== 'connected' || world.veil.ward_remaining > 0 || world.economy.fuel < world.veil.ward_fuel} onClick={() => commands.wardVeilTarget(lighthouse.id)}>Ward beacon — {world.veil.ward_fuel} fuel</button>
+        </section>}
         <p className="hint">{lighthouse.connected ? 'Connected to First Haven' : 'Isolated from First Haven'}</p>
         <p className="hint">Beacon upkeep: {lighthouse.fuel_upkeep} fuel/s{!lighthouse.active && ' when lit'}.</p>
         {cannotLight && <p role="status">Not enough fuel for one second of network upkeep.</p>}

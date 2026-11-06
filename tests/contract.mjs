@@ -6,7 +6,7 @@ import { serverMessageSchema } from '../apps/web/src/protocol.ts';
 test('actual Rust snapshots and responses satisfy the frontend schema', () => {
   const output = execFileSync('cargo', ['run', '--quiet', '--locked', '--offline', '-p', 'el-pharos-server', '--example', 'contract_snapshots'], { encoding: 'utf8', timeout: 60000 });
   const messages = JSON.parse(output);
-  assert.equal(messages.length, 10);
+  assert.equal(messages.length, 11);
   for (const message of messages) serverMessageSchema.parse(message);
   const worlds = messages.filter(message => message.type === 'world_snapshot').map(message => message.world);
   assert.ok(worlds[5].islands.length >= 6 && worlds[5].islands.length <= 12);
@@ -24,4 +24,6 @@ test('actual Rust snapshots and responses satisfy the frontend schema', () => {
   assert.equal(worlds[2].salvage.vessel_route.length, 2);
   assert.equal(worlds[3].economy.paused, true);
   assert.equal(worlds[4].economy.blackout, true);
+  assert.equal(worlds[8].veil.target, 'beacon-5');
+  assert.equal(worlds[8].veil.ward_remaining, 90);
 });

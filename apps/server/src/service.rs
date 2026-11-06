@@ -140,6 +140,9 @@ impl GameService {
                 let mut result = Ok(());
                 changed = state.world.send_if_modified(|world| {
                     let change = match command {
+                        ClientMessage::WardVeilTarget { lighthouse_id, .. } => {
+                            world.ward_veil_target(&lighthouse_id)
+                        }
                         ClientMessage::SendDoctor { lighthouse_id, .. } => {
                             world.send_doctor(&lighthouse_id)
                         }

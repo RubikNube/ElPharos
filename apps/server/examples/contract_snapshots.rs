@@ -7,10 +7,12 @@ use el_pharos_server::{
 };
 
 fn main() {
-    let initial: WorldState =
+    let mut initial: WorldState =
         serde_json::from_str(include_str!("../../../tests/fixtures/fixed-world.json")).unwrap();
+    initial.veil = Some(Default::default());
     let mut legacy = initial.clone();
     legacy.salvage = None;
+    legacy.veil = None;
     legacy.research = None;
     legacy.islands.truncate(4);
     legacy.lighthouses.truncate(4);
@@ -64,6 +66,10 @@ fn main() {
     returning.lighthouses[1].sick = false;
     returning.lighthouses[1].immune_until = 600;
     returning.doctor.as_mut().unwrap().returning = true;
+    let mut front = initial.clone();
+    front.set_lighthouse_active("beacon-5", true).unwrap();
+    front.tick();
+    front.ward_veil_target("beacon-5").unwrap();
     let worlds = [
         initial,
         legacy,
@@ -73,6 +79,7 @@ fn main() {
         WorldState::default(),
         sick,
         returning,
+        front,
     ];
     let mut messages = Vec::new();
     for world in &worlds {

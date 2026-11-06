@@ -17,6 +17,7 @@ export function researchFixture(): NonNullable<WorldState['research']> {
 
 export function researchWorldFixture(): WorldState {
   return {
+    veil: { target: null, approach_remaining: 0, cooldown_remaining: 0, ward_remaining: 0, defended: 0, next_target_index: 0, ward_fuel: 40, complete: false },
     voyages: { next_id: 1, spawn_in: 30, ships: [] },
     doctor: null, doctor_rules: { trip_fuel: 40, speed: 120 },
     research: researchFixture(),
