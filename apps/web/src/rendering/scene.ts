@@ -7,6 +7,7 @@ import { drawSelection } from './selectionLayer';
 import { createShipAnimator } from './shipAnimation';
 import type { RenderShip } from './shipAnimation';
 import type { LighthouseHover } from './lighthouseHover';
+import { shipAt } from './shipHover';
 
 export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void, onHover?: (hover: LighthouseHover) => void) {
   const app = new Application();
@@ -146,7 +147,8 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     syncTiles();
     animator.update(world, [...tiles.values()].flatMap(tile => tile.ships));
   }
-  const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect, onHover });
+  const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect, onHover,
+    shipAt: (x, y) => shipAt([...tiles.values()].map(tile => ({ x: tile.terrain.position.x, y: tile.terrain.position.y, ships: tile.ships })), camera, host.getBoundingClientRect(), x, y) });
   const observer = new ResizeObserver(() => {
     removeControls.clearHover();
     const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);

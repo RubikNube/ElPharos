@@ -113,3 +113,27 @@ it('anchors hover and selection to the visible periodic copy', () => {
   expect(s.onSelect).toHaveBeenLastCalledWith('beacon-0');
   s.controls();
 });
+
+it('prioritizes a ship under the pointer and shows it after a short hover', () => {
+  vi.useFakeTimers();
+  const world = researchWorldFixture();
+  const host = Object.assign(new EventTarget(), {
+    getBoundingClientRect: () => ({ left: 10, top: 20 }),
+    focus: vi.fn(), setPointerCapture: vi.fn(), hasPointerCapture: () => false,
+    classList: { add: vi.fn(), remove: vi.fn() },
+  }) as unknown as HTMLDivElement;
+  const onHover = vi.fn();
+  const controls = attachCameraControls(host, {
+    getCamera: () => ({ x: 0, y: 0, zoom: 1 }), getWorld: () => world,
+    render: vi.fn(), zoom: vi.fn(), reset: vi.fn(), onSelect: vi.fn(), onHover,
+    shipAt: (x, y) => x === 110 && y === 120 ? { id: 'voyage:1', x: 100, y: 100 } : null,
+  });
+  host.dispatchEvent(Object.assign(new Event('pointermove'), { clientX: 110, clientY: 120, pointerType: 'mouse' }));
+  vi.advanceTimersByTime(149);
+  expect(onHover).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'ship' }));
+  vi.advanceTimersByTime(1);
+  expect(onHover).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'ship', id: 'voyage:1' }));
+  host.dispatchEvent(new Event('pointerleave'));
+  expect(onHover).toHaveBeenLastCalledWith(null);
+  controls();
+});

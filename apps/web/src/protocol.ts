@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 
 const point = z.object({ x: z.number(), y: z.number() });
 const island = z.object({
@@ -36,6 +36,7 @@ export const vesselRulesSchema = z.object({
 });
 const vesselSchema = z.object({ enabled: z.boolean(), phase: z.enum(['docked', 'outbound', 'searching', 'returning']), timer: z.number().int().nonnegative(), cargo: z.number().int().nonnegative() });
 export const worldSchema = z.object({
+  voyages: z.object({ next_id: z.number().int().positive(), spawn_in: z.number().int().min(0).max(60), ships: z.array(z.object({ id: z.number().int().positive(), kind: z.enum(['family', 'mail']), message_id: z.number().int().min(0).max(5), origin: z.string(), destination: z.string(), from: z.string(), to: z.string(), progress: z.number().min(0).lt(1), phase: z.enum(['outbound', 'visiting', 'returning']), visit_timer: z.number().int().min(0).max(5) })).max(2) }),
   doctor: z.object({ destination: z.string().min(1), returning: z.boolean(), progress: z.number().min(0).lt(1) }).nullable(),
   doctor_rules: z.object({ trip_fuel: z.literal(40), speed: z.literal(120) }),
   research: researchSchema.nullable(),

@@ -55,6 +55,7 @@ and reset controls, or focus the map and press arrow keys, `+`, `-`, and `0`.
 Startup and Reset center on First Haven at a local zoom independent of unexplored
 map dimensions. Select a lighthouse by clicking any copy of its marker or its button in the side panel.
 Hover over a discovered lighthouse for a short time to see its status and keeper.
+Hover over a ship to see its current status and a crew message.
 Keeper names remain stable after loading. Their moods reflect darkness, low fuel,
 isolation, or a healthy connection, with a random remark suited to each mood.
 The selected lighthouse's keeper also appears in the side panel.
@@ -104,9 +105,9 @@ automatically. The side panel shows fuel, rates, pause status, and shortage feed
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
 preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
-New saves use format 9 and persist keeper health, doctor voyages, facilities, Salvage, specializations, salvage vessels, and
-research rather than derived production. Save formats 1–8 remain supported.
-Wire protocol 12 requires matching client and server versions.
+New saves use format 10 and persist keeper health, doctor voyages, ambient shipping voyages, facilities, Salvage, specializations, salvage vessels, and
+research rather than derived production. Save formats 1–9 remain supported.
+Wire protocol 13 requires matching client and server versions.
 
 ## Connected shipping and scenario goal
 
@@ -115,6 +116,11 @@ circles overlap or touch, including through chains of other active beacons.
 Golden links and moving ships show these safe corridors; legacy saves use
 decorative shipping with no cargo inventories or travel delay. New games use the
 automatic cargo system described below; neither mode has fleet controls.
+When two or more lights are connected, a family boat or mail ship sets out about
+every 30–60 simulation seconds. At most two voyages run at once. They follow
+safe links, wait during outages, and resume with the network; family boats visit
+and return while mail ships deliver letters. These trips are ambient and do not
+change fuel, resources, or keeper moods. Their progress is saved.
 Restored remote facilities stop
 producing when their beacon goes dark or loses its connection. Relighting the
 chain resumes production on the next tick. Connectivity and effective production
@@ -274,7 +280,7 @@ as well as restoring every fuel facility and connecting all beacons
 with sustainable fuel. Production timers and cargo in transit are saved.
 Formats 1–4 retain their original map, free expansion, and objective under a
 legacy ruleset, which remains in effect after saving again. Current saves use
-format 9 and matching clients and servers use wire protocol 12. The older sections
+format 10 and matching clients and servers use wire protocol 13. The older sections
 above describe the original four-island scenario; these rules supersede them for
 new games. Base Salvage constants live in `apps/server/src/salvage.rs`;
 `apps/server/src/rules.rs` collects effective rules for simulation and snapshots.
@@ -354,11 +360,11 @@ the next tick. Expanded holds affect subsequent loading and do not create extra
 cargo in ships already sailing. Fuel, costs, previews, cargo animation, and ETA
 all reflect effective server rules.
 
-New saves use **format 9**, persisting keeper health and doctor voyages alongside completed technology IDs and the
+New saves use **format 10**, persisting keeper health, doctor voyages, and ambient shipping voyages alongside completed technology IDs and the
 existing world. Loading formats 5–6 adds empty research to Salvage worlds and
 reveals archives already covered by exploration. Formats 1–4 and resaved worlds
 without Salvage retain their legacy gameplay with no research. Matching clients
-and servers use **wire protocol 12**. These rules supersede earlier version and
+and servers use **wire protocol 13**. These rules supersede earlier version and
 balance descriptions above where an upgrade applies.
 
 Use **Restart** beside Save and Load to start a fresh shared game. Confirming resets progress for every connected tab and keeps the existing save slot. When all scenario objectives are met, a victory notification appears. Choose **Continue playing** to dismiss it and keep managing the archipelago; the simulation continues after victory.

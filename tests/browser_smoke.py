@@ -144,7 +144,7 @@ try:
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.2)
     vessel_saved = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
-    assert vessel_saved['save_version'] == 9
+    assert vessel_saved['save_version'] == 10
     assert vessel_saved['world']['salvage']['vessel']['phase'] == 'outbound'
     vessel_saved['world']['salvage']['vessel'].update(phase='returning', timer=4, cargo=40, enabled=False)
     vessel_saved['world']['economy']['paused'] = False

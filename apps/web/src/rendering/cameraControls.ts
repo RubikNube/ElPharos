@@ -10,10 +10,11 @@ type Options = {
   reset: () => void;
   onSelect: (id: string | null) => void;
   onHover?: (hover: LighthouseHover) => void;
+  shipAt?: (x: number, y: number) => { id: string; x: number; y: number } | null;
 };
 
-export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld, render, zoom, reset, onSelect, onHover = () => {} }: Options) {
-  const hover = createLighthouseHover(host, getWorld, getCamera, onHover);
+export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld, render, zoom, reset, onSelect, onHover = () => {}, shipAt }: Options) {
+  const hover = createLighthouseHover(host, getWorld, getCamera, onHover, shipAt);
   let drag: { id: number; x: number; y: number; startX: number; startY: number; moved: boolean } | null = null;
   const down = (event: PointerEvent) => {
     if (event.button !== 0 || drag) return;

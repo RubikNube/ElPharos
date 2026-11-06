@@ -82,5 +82,6 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
     crate::health::validate(world)?;
     crate::research::validate(world)?;
     crate::salvage::validate(world)?;
+    crate::voyages::validate(world)?;
     Ok(())
 }

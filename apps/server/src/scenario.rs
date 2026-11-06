@@ -84,6 +84,7 @@ fn generate(rng: &mut StdRng, count: usize, jitter: f64) -> WorldState {
     }
     let mut world = WorldState {
         doctor: None,
+        voyages: crate::voyages::VoyageTraffic::default(),
         research: Some(crate::research::Research::default()),
         salvage: Some(crate::salvage::Salvage::default()),
         economy: Economy::default(),

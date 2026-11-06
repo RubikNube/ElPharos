@@ -3,6 +3,9 @@ import type { WorldState } from '../protocol';
 import { cargoSpeed } from '../shipping';
 
 export type RenderShip = {
+  id?: string;
+  voyage?: WorldState['voyages']['ships'][number];
+  legacy?: { from: string; to: string };
   graphic: Graphics;
   from: { x: number; y: number };
   to: { x: number; y: number };
@@ -47,6 +50,14 @@ export function createShipAnimator(render: () => void) {
         const elapsed = world?.economy.paused || reducedMotion.matches || !ship.safe ? 0 : Math.min(1, (now - snapshotTime) / 1000);
         const length = Math.hypot(ship.to.x-ship.from.x, ship.to.y-ship.from.y);
         const progress = Math.min(1, ship.cargo.progress + (length ? elapsed * (world ? cargoSpeed(world, ship.cargo.from, ship.cargo.to) : 60) / length : 0));
+        ship.graphic.position.set(ship.from.x + (ship.to.x-ship.from.x)*progress, ship.from.y + (ship.to.y-ship.from.y)*progress);
+        ship.graphic.rotation = Math.atan2(ship.to.y-ship.from.y, ship.to.x-ship.from.x);
+        continue;
+      }
+      if (ship.voyage) {
+        const elapsed = world?.economy.paused || reducedMotion.matches || !ship.safe ? 0 : Math.min(1, Math.max(0, (now - snapshotTime) / 1000));
+        const length = Math.hypot(ship.to.x-ship.from.x, ship.to.y-ship.from.y);
+        const progress = Math.min(1, ship.voyage.progress + (length ? elapsed * 75 / length : 0));
         ship.graphic.position.set(ship.from.x + (ship.to.x-ship.from.x)*progress, ship.from.y + (ship.to.y-ship.from.y)*progress);
         ship.graphic.rotation = Math.atan2(ship.to.y-ship.from.y, ship.to.x-ship.from.x);
         continue;

@@ -11,6 +11,7 @@ mod scenario;
 mod service;
 mod validation;
 pub mod vessel;
+pub mod voyages;
 
 use axum::{
     Router,

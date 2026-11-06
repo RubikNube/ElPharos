@@ -86,7 +86,7 @@ export function buildWorldLayers(world: WorldState, pass: 'all' | 'terrain' | 's
         const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(0xffedb3)
           .stroke({ color: 0x081521, width: 2 });
         shipLayer.addChild(graphic);
-        ships.push({ graphic, from: from.position, to: to.position, offset: index * 0.37 });
+        ships.push({ id: `legacy:${link.from}:${link.to}`, legacy: link, graphic, from: from.position, to: to.position, offset: index * 0.37 });
       }
       if (pass === 'terrain') continue;
       for (const cargo of world.salvage?.ships ?? []) {
@@ -96,7 +96,7 @@ export function buildWorldLayers(world: WorldState, pass: 'all' | 'terrain' | 's
         if (!from || !to || !intersectsTile(from.position, to.position) || !isDiscovered(world, from.position)) continue;
         const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(cargo.cargo ? 0xf3b45c : 0xadc7d7).stroke({color: 0x081521, width: 2});
         shipLayer.addChild(graphic);
-        ships.push({graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && distance(world, from.position, to.position) <= from.effective_radius+to.effective_radius});
+        ships.push({id: `cargo:${cargo.yard_id}`, graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && distance(world, from.position, to.position) <= from.effective_radius+to.effective_radius});
       }
       if (world.doctor) {
         const haven = world.islands.find(i => i.fuel_facility === 'haven');
@@ -105,7 +105,7 @@ export function buildWorldLayers(world: WorldState, pass: 'all' | 'terrain' | 's
           const graphic = new Graphics().poly([18, 0, -12, -9, -16, 0, -12, 9]).fill(0xeee5cc)
             .stroke({ color: 0x081521, width: 2 }).rect(-5, -6, 4, 12).fill(0xc74555).rect(-9, -2, 12, 4).fill(0xc74555);
           shipLayer.addChild(graphic);
-          ships.push({ graphic, from: shifted(haven.position), to: shifted(nearest(world, haven.position, target.position)), offset: 0, doctor: world.doctor });
+          ships.push({ id: 'doctor', graphic, from: shifted(haven.position), to: shifted(nearest(world, haven.position, target.position)), offset: 0, doctor: world.doctor });
         }
       }
       const vessel = world.salvage?.vessel;
@@ -114,7 +114,18 @@ export function buildWorldLayers(world: WorldState, pass: 'all' | 'terrain' | 's
         const graphic = new Graphics().poly([22, 0, 10, -10, -16, -10, -20, -5, -20, 5, -16, 10, 10, 10]).fill(vessel.cargo ? 0xf3b45c : 0xadc7d7)
           .stroke({ color: 0x081521, width: 2 }).rect(-9, -5, 12, 10).fill(0xeee5cc);
         shipLayer.addChild(graphic);
-        ships.push({ graphic, from: shifted(route[0]), to: shifted(route[1]), offset: 0, vessel, travelSeconds: world.salvage!.rules.vessel.travel_seconds });
+        ships.push({ id: 'vessel', graphic, from: shifted(route[0]), to: shifted(route[1]), offset: 0, vessel, travelSeconds: world.salvage!.rules.vessel.travel_seconds });
+      }
+      for (const voyage of world.voyages.ships) {
+        const source = world.lighthouses.find(l => l.id === voyage.from), target = world.lighthouses.find(l => l.id === voyage.to);
+        const from = source && { ...source, position: shifted(source.position) };
+        const to = target && from && { ...target, position: shifted(nearest(world, source!.position, target.position)) };
+        if (!from || !to || !intersectsTile(from.position, to.position) || !isDiscovered(world, from.position)) continue;
+        const graphic = new Graphics().poly([14, 0, -9, -7, -7, 0, -9, 7]).fill(voyage.kind === 'mail' ? 0xb9d8ec : 0xe9c7a7)
+          .stroke({ color: 0x081521, width: 2 });
+        if (voyage.kind === 'mail') graphic.rect(-4, -4, 7, 8).fill(0xf4f1df);
+        shipLayer.addChild(graphic);
+        ships.push({ id: `voyage:${voyage.id}`, graphic, from: from.position, to: to.position, offset: 0, voyage, safe: from.connected && to.connected && distance(world, from.position, to.position) <= from.effective_radius + to.effective_radius });
       }
     }
   return { worldLayer, shipLayer, ships };

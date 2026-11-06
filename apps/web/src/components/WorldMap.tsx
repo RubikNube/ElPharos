@@ -5,11 +5,12 @@ import type { LighthouseHover } from '../rendering/lighthouseHover';
 import { keeperIdentity } from '../state/keeper';
 import { isDiscovered } from '../rendering/visibility';
 import { LighthouseStatus } from './LighthouseStatus';
+import { ShipStatus } from './ShipStatus';
 
 function HoverCard({ target }: { target: NonNullable<LighthouseHover> }) {
   const world = useWorldStore(state => state.world);
   const card = useRef<HTMLDivElement>(null);
-  const light = world?.lighthouses.find(light => keeperIdentity(light) === target.identity && isDiscovered(world, light.position));
+  const light = target.kind === 'lighthouse' ? world?.lighthouses.find(light => keeperIdentity(light) === target.identity && isDiscovered(world, light.position)) : null;
   useLayoutEffect(() => {
     const element = card.current;
     if (!element) return;
@@ -26,9 +27,9 @@ function HoverCard({ target }: { target: NonNullable<LighthouseHover> }) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [target, light?.id]);
-  if (!world || !light) return null;
-  return <div ref={card} className="lighthouse-tooltip" role="tooltip" aria-label="Lighthouse status">
-    <LighthouseStatus world={world} light={light} />
+  if (!world || (target.kind === 'lighthouse' && !light)) return null;
+  return <div ref={card} className="lighthouse-tooltip" role="tooltip" aria-label={target.kind === 'ship' ? 'Ship status' : 'Lighthouse status'}>
+    {target.kind === 'ship' ? <ShipStatus world={world} id={target.id} /> : <LighthouseStatus world={world} light={light!} />}
   </div>;
 }
 
@@ -61,7 +62,7 @@ export function WorldMap() {
 
   return <section className="map-panel" aria-label="Ocean map">
     <div className="map" ref={host} tabIndex={0} role="region"
-      aria-label="World map. Hover over a lighthouse for status or click to select. Drag or use arrow keys to pan. Scroll or press plus and minus to zoom. Press zero to reset." />
+      aria-label="World map. Hover over a lighthouse or ship for status, or click a lighthouse to select. Drag or use arrow keys to pan. Scroll or press plus and minus to zoom. Press zero to reset." />
     {hover && <HoverCard key={hover.identity} target={hover} />}
     <div className="map-caption"><span>THE OPEN OCEAN</span><small>An archipelago waiting for light.</small></div>
     {error && <p className="map-error" role="alert">{error}</p>}

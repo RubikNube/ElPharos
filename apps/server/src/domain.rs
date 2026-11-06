@@ -105,6 +105,8 @@ impl Default for Economy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
     pub doctor: Option<crate::health::DoctorVoyage>,
+    #[serde(default)]
+    pub voyages: crate::voyages::VoyageTraffic,
     pub research: Option<crate::research::Research>,
     #[serde(default)]
     pub salvage: Option<crate::salvage::Salvage>,
@@ -281,6 +283,7 @@ impl WorldState {
         }
         self.tick_salvage();
         self.tick_salvage_vessel();
+        self.tick_voyages();
         let e = &mut self.economy;
         e.elapsed_seconds += 1;
         self.revision = revision;

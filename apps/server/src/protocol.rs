@@ -1,7 +1,7 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 12;
+pub const VERSION: u8 = 13;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -166,6 +166,7 @@ fn serialize_snapshot<S: serde::Serializer>(
     #[derive(Serialize)]
     struct Snapshot<'a> {
         doctor: &'a Option<crate::health::DoctorVoyage>,
+        voyages: &'a crate::voyages::VoyageTraffic,
         doctor_rules: crate::health::DoctorRules,
         economy: EconomySnapshot<'a>,
         salvage: Option<SalvageSnapshot<'a>>,
@@ -197,6 +198,7 @@ fn serialize_snapshot<S: serde::Serializer>(
         .collect();
     Snapshot {
         doctor: &world.doctor,
+        voyages: &world.voyages,
         doctor_rules: crate::health::DoctorRules::default(),
         salvage: world.salvage.as_ref().map(|data| SalvageSnapshot {
             data,

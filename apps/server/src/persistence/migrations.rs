@@ -64,6 +64,13 @@ pub(super) fn decode(data: &[u8]) -> Result<WorldState, String> {
     } else if value["world"].get("doctor").is_none() {
         return Err("Missing doctor state".into());
     }
+    if legacy_version <= 9 {
+        value["world"]["voyages"] =
+            serde_json::to_value(crate::voyages::VoyageTraffic::default()).unwrap();
+        value["save_version"] = 10.into();
+    } else if value["world"].get("voyages").is_none() {
+        return Err("Missing voyage traffic".into());
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
     if save.save_version != SAVE_VERSION {
         return Err("Unsupported save version".into());

@@ -17,6 +17,7 @@ export function researchFixture(): NonNullable<WorldState['research']> {
 
 export function researchWorldFixture(): WorldState {
   return {
+    voyages: { next_id: 1, spawn_in: 30, ships: [] },
     doctor: null, doctor_rules: { trip_fuel: 40, speed: 120 },
     research: researchFixture(),
     economy: { fuel: 300, capacity: 600, production: 2, facility_restore_cost: 120, restored_facility_production: 3, beacon_upkeep: 1, elapsed_seconds: 0, paused: false, blackout: false },
