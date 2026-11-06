@@ -2,6 +2,7 @@ import type { WorldState } from '../protocol';
 import type { Camera } from './camera';
 import { createLighthouseHover, lighthouseAt, type LighthouseHover } from './lighthouseHover';
 import { isDiscovered } from './visibility';
+import { wrap } from '../geometry';
 
 type Options = {
   getCamera: () => Camera;
@@ -15,9 +16,12 @@ type Options = {
   getSelectedId?: () => string | null;
   onHover?: (hover: LighthouseHover) => void;
   shipAt?: (x: number, y: number) => { id: string; x: number; y: number } | null;
+  onShipSelect?: () => void;
+  onOrder?: (destination: { x: number; y: number }, lighthouseId: string | null) => void;
+  isBoatSelected?: () => boolean;
 };
 
-export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld, render, zoom, reset, onSelect, onContextMenu, onMapNavigate, getSelectedId, onHover = () => {}, shipAt }: Options) {
+export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld, render, zoom, reset, onSelect, onContextMenu, onMapNavigate, getSelectedId, onHover = () => {}, shipAt, onShipSelect, onOrder, isBoatSelected }: Options) {
   const hover = createLighthouseHover(host, getWorld, getCamera, onHover, shipAt);
   let drag: { id: number; x: number; y: number; startX: number; startY: number; moved: boolean } | null = null;
   let longPress: ReturnType<typeof setTimeout> | undefined;
@@ -28,6 +32,15 @@ export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld
     hover.clear();
     onSelect(id);
     onContextMenu?.({ id, x: clientX - bounds.left, y: clientY - bounds.top });
+  };
+  const orderAt = (clientX: number, clientY: number) => {
+    const world = getWorld();
+    if (!world) return;
+    const hit = lighthouseAt(host, world, getCamera(), clientX, clientY);
+    if (hit) { onOrder?.(hit.position, hit.id); return; }
+    const bounds = host.getBoundingClientRect();
+    onOrder?.({ x: wrap((clientX - bounds.left - getCamera().x) / getCamera().zoom, world.width),
+      y: wrap((clientY - bounds.top - getCamera().y) / getCamera().zoom, world.height) }, null);
   };
   const down = (event: PointerEvent) => {
     if (event.button !== 0 || drag) return;
@@ -62,8 +75,14 @@ export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld
     if (event.type !== 'pointerup') hover.clear();
     if (drag?.id !== event.pointerId) return;
     if (event.type === 'pointerup' && !drag.moved && !longPressed && getWorld()) {
+      if (shipAt?.(event.clientX, event.clientY)?.id === 'expedition') {
+        onShipSelect?.();
+      } else if (event.pointerType === 'touch' && isBoatSelected?.()) {
+        orderAt(event.clientX, event.clientY);
+      } else {
       const hit = lighthouseAt(host, getWorld(), getCamera(), event.clientX, event.clientY);
       onSelect(hit?.id ?? null);
+      }
     }
     drag = null;
     longPressed = false;
@@ -106,9 +125,13 @@ export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld
   const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') hover.clear(); };
   const contextMenu = (event: MouseEvent) => {
     const hit = lighthouseAt(host, getWorld(), getCamera(), event.clientX, event.clientY);
-    if (!hit) return;
-    event.preventDefault();
-    openMenu(hit.id, event.clientX, event.clientY);
+    if (hit) {
+      event.preventDefault();
+      openMenu(hit.id, event.clientX, event.clientY);
+    } else if (isBoatSelected?.()) {
+      event.preventDefault();
+      orderAt(event.clientX, event.clientY);
+    }
   };
   host.ownerDocument?.addEventListener('keydown', escape);
   host.addEventListener('pointerdown', down);

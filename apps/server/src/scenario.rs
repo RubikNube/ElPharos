@@ -83,6 +83,7 @@ fn generate(rng: &mut StdRng, count: usize, jitter: f64) -> WorldState {
         point.y += 310.0 - min_y;
     }
     let mut world = WorldState {
+        expedition: None,
         veil: Some(crate::veil::Veil::default()),
         doctor: None,
         voyages: crate::voyages::VoyageTraffic::default(),
@@ -134,6 +135,8 @@ fn generate(rng: &mut StdRng, count: usize, jitter: f64) -> WorldState {
             },
         };
         world.lighthouses.push(Lighthouse {
+            visited: n == 1,
+            secured: false,
             sick: false,
             immune_until: 300,
             specialization: None,
@@ -179,6 +182,7 @@ fn generate(rng: &mut StdRng, count: usize, jitter: f64) -> WorldState {
         }
         world.islands.push(island);
     }
+    world.expedition = Some(crate::expedition::Expedition::at_haven(&world));
     world
 }
 
@@ -252,6 +256,7 @@ pub(crate) fn fixed_world() -> WorldState {
     let mut world: WorldState =
         serde_json::from_str(include_str!("../../../tests/fixtures/fixed-world.json")).unwrap();
     world.veil = Some(crate::veil::Veil::default());
+    world.expedition = Some(crate::expedition::Expedition::at_haven(&world));
     world
 }
 
@@ -375,6 +380,9 @@ mod tests {
                     }
                     _ => {}
                 }
+                // This test exercises economy playability; visits are covered by
+                // the expedition tests below.
+                world.lighthouses[i].visited = true;
                 world.set_lighthouse_active(&beacon_id, true).unwrap();
                 while world.lighthouses[i].radius < GUARANTEED_RADIUS {
                     world.expand(&beacon_id).unwrap();

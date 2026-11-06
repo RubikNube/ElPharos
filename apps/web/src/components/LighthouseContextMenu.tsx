@@ -13,7 +13,7 @@ export function lighthouseActions(world: WorldState, id: string, connected: bool
   const actions: Action[] = [
     {
       label: light.active ? 'Extinguish beacon' : 'Light the beacon',
-      reason: offline ?? (!light.active && world.economy.fuel < networkUpkeep(world) + light.fuel_upkeep ? 'Not enough fuel for one second of network upkeep.' : null),
+      reason: offline ?? (!light.active && !light.visited ? 'Send the expedition boat here first.' : !light.active && world.economy.fuel < networkUpkeep(world) + light.fuel_upkeep ? 'Not enough fuel for one second of network upkeep.' : null),
       run: () => commands.setLighthouseActive(id, !light.active),
     },
     {
@@ -22,6 +22,20 @@ export function lighthouseActions(world: WorldState, id: string, connected: bool
       run: () => commands.expandLighthouse(id),
     },
   ];
+  if (world.expedition.pending_choice === id) {
+    actions.unshift(
+      {
+        label: `Explore — collect up to 20 ${world.salvage ? 'Salvage' : 'fuel'}`,
+        reason: offline,
+        run: () => commands.chooseExpedition(id, 'explore'),
+      },
+      {
+        label: 'Secure — 30s, then −0.25 fuel/s upkeep',
+        reason: offline,
+        run: () => commands.chooseExpedition(id, 'secure'),
+      },
+    );
+  }
   if (world.salvage) {
     for (const [role, name] of [['efficient_lamp', 'Efficient lamp'], ['navigation_beacon', 'Navigation beacon']] as const) {
       const cost = light.specialization ? world.salvage.rules.refit_cost : world.salvage.rules.specialization_cost;
@@ -61,6 +75,12 @@ export function lighthouseActions(world: WorldState, id: string, connected: bool
       run: () => commands.buildSalvageVessel(),
     });
   }
+  const boat = world.expedition;
+  actions.push({
+    label: 'Send expedition here',
+    reason: offline ?? (boat.pending_choice || boat.securing ? 'Resolve the current expedition visit first.' : !isNetworkIlluminated(world, boat.position) || !isNetworkIlluminated(world, light.position) ? 'Requires a route through connected light.' : null),
+    run: () => commands.orderExpedition(light.position, light.id),
+  });
   return actions;
 }
 

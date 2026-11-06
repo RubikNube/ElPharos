@@ -2,6 +2,8 @@ import { PROTOCOL_VERSION, type ClientMessage, type TechnologyId } from '../prot
 
 export function worldCommands(send: (message: ClientMessage) => void) {
   return {
+    orderExpedition: (destination: { x: number; y: number }, lighthouse_id: string | null = null) => send({ type: 'order_expedition', protocol_version: PROTOCOL_VERSION, destination, lighthouse_id }),
+    chooseExpedition: (lighthouse_id: string, choice: 'explore' | 'secure') => send({ type: 'choose_expedition', protocol_version: PROTOCOL_VERSION, lighthouse_id, choice }),
     wardVeilTarget: (lighthouse_id: string) => send({ type: 'ward_veil_target', protocol_version: PROTOCOL_VERSION, lighthouse_id }),
     sendDoctor: (lighthouse_id: string) => send({ type: 'send_doctor', protocol_version: PROTOCOL_VERSION, lighthouse_id }),
     buildSalvageVessel: () => send({ type: 'build_salvage_vessel', protocol_version: PROTOCOL_VERSION }),

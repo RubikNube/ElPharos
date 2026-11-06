@@ -10,6 +10,7 @@ fn main() {
     let mut initial: WorldState =
         serde_json::from_str(include_str!("../../../tests/fixtures/fixed-world.json")).unwrap();
     initial.veil = Some(Default::default());
+    initial.expedition = Some(el_pharos_server::expedition::Expedition::at_haven(&initial));
     let mut legacy = initial.clone();
     legacy.salvage = None;
     legacy.veil = None;

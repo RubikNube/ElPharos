@@ -9,7 +9,7 @@ import { lighthouseAt } from './rendering/lighthouseHover';
 function populatedWorld(): WorldState {
   const world = researchWorldFixture();
   world.islands[0].fuel_facility = 'haven';
-  world.lighthouses = [{ id: 'beacon-1', island_id: world.islands[0].id, name: 'First Light', position: { x: 400, y: 400 }, radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true, sick: false, immune_until: 300, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25 }];
+  world.lighthouses = [{ id: 'beacon-1', island_id: world.islands[0].id, name: 'First Light', position: { x: 400, y: 400 }, radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true, sick: false, immune_until: 300, visited: true, secured: false, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25 }];
   return world;
 }
 it('wraps axes, corners, negative positions, multiple spans, and half-span ties', () => {

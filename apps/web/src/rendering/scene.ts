@@ -9,7 +9,7 @@ import type { RenderShip } from './shipAnimation';
 import type { LighthouseHover } from './lighthouseHover';
 import { shipAt } from './shipHover';
 
-export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void, onHover?: (hover: LighthouseHover) => void, onContextMenu?: (target: { id: string; x: number; y: number }) => void, onMapNavigate?: () => void, getSelectedId?: () => string | null) {
+export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void, onHover?: (hover: LighthouseHover) => void, onContextMenu?: (target: { id: string; x: number; y: number }) => void, onMapNavigate?: () => void, getSelectedId?: () => string | null, onShipSelect?: () => void, onOrder?: (destination: { x: number; y: number }, lighthouseId: string | null) => void, isBoatSelected?: () => boolean) {
   const app = new Application();
   await app.init({
     width: host.clientWidth, height: host.clientHeight,
@@ -24,6 +24,7 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
   app.stage.addChild(worldLayer, overlay);
   let world: WorldState | null = null;
   let selectedId: string | null = null;
+  let boatSelected = false;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
   let fitted = false;
   let disposed = false;
@@ -98,7 +99,7 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
         const built = buildWorldLayers(world, 'ships');
         built.worldLayer.destroy({ children: true });
         const selectionContent = new Container();
-        drawSelection(selectionContent, world, selectedId);
+        drawSelection(selectionContent, world, selectedId, boatSelected);
         const content = new Container();
         const sprite = new Sprite(terrainTexture!);
         sprite.width = world.width;
@@ -150,6 +151,7 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     animator.update(world, [...tiles.values()].flatMap(tile => tile.ships));
   }
   const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect, onHover, onContextMenu, onMapNavigate, getSelectedId,
+    onShipSelect, onOrder, isBoatSelected,
     shipAt: (x, y) => shipAt([...tiles.values()].map(tile => ({ x: tile.terrain.position.x, y: tile.terrain.position.y, ships: tile.ships })), camera, host.getBoundingClientRect(), x, y) });
   const observer = new ResizeObserver(() => {
     removeControls.clearHover();
@@ -164,8 +166,13 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     setSelection(id: string | null) {
       selectedId = id;
       for (const tile of tiles.values()) {
-        drawSelection(tile.selection.children[0] as Container, world, id);
+        drawSelection(tile.selection.children[0] as Container, world, id, boatSelected);
       }
+      render();
+    },
+    setBoatSelected(value: boolean) {
+      boatSelected = value;
+      for (const tile of tiles.values()) drawSelection(tile.selection.children[0] as Container, world, selectedId, boatSelected);
       render();
     },
     dispose() {

@@ -81,6 +81,26 @@ pub(super) fn decode(data: &[u8]) -> Result<WorldState, String> {
     } else if value["world"].get("veil").is_none() {
         return Err("Missing Veil state".into());
     }
+    if legacy_version <= 11 {
+        let world_value = &mut value["world"];
+        let lights = world_value["lighthouses"]
+            .as_array_mut()
+            .ok_or("Invalid lighthouses")?;
+        for light in lights {
+            let visited = light["explored_radius"]
+                .as_f64()
+                .is_some_and(|radius| radius > 0.0);
+            light["visited"] = visited.into();
+            light["secured"] = false.into();
+        }
+        let old: WorldState = serde_json::from_value(world_value.clone())
+            .map_err(|e| format!("Invalid save: {e}"))?;
+        world_value["expedition"] =
+            serde_json::to_value(crate::expedition::Expedition::at_haven(&old)).unwrap();
+        value["save_version"] = 12.into();
+    } else if value["world"].get("expedition").is_none() {
+        return Err("Missing expedition state".into());
+    }
     let save: Save = serde_json::from_value(value).map_err(|e| format!("Invalid save: {e}"))?;
     if save.save_version != SAVE_VERSION {
         return Err("Unsupported save version".into());

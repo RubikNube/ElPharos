@@ -5,6 +5,7 @@ import { ObjectivePanel } from './components/ObjectivePanel';
 import { LighthousePanel } from './components/LighthousePanel';
 import { SaveControls } from './components/SaveControls';
 import { WorldMap } from './components/WorldMap';
+import { ExpeditionPanel } from './components/ExpeditionPanel';
 import { useWorldClient } from './network/useWorldClient';
 import { useWorldStore } from './state/worldStore';
 
@@ -28,11 +29,12 @@ export function App() {
     <div className="workspace"><WorldMap commands={commands} /><aside>
       {world?.economy.blackout && <p role="status" className="error">Fuel shortage extinguished every beacon. First Haven still produces 2 fuel/s; relight the network when fuel is available.</p>}
       {world && <ObjectivePanel world={world} />}
+      {world && <ExpeditionPanel world={world} connected={connection === 'connected'} commands={commands} />}
       {world?.research && <ResearchPanel world={world} connected={connection === 'connected'} onResearch={commands.research} />}
       {world && <LighthousePanel world={world} selectedId={selectedId} connection={connection} commands={commands} onSelect={id => useWorldStore.setState({ selectedId: id })} />}
       {!world && <p className="hint">Waiting for the world server…</p>}
       <SaveControls connection={connection} pending={pending} notice={notice} error={error} commands={commands} />
-      <div className="field-notes"><p className="eyebrow">CHART CONTROLS</p><p>Hover over a lighthouse for status<br />Click a lighthouse for details<br />Right click or long press for actions<br />Drag to explore<br />Scroll to zoom<br />Reset view to return home</p><small>Keyboard: arrow keys, + / −, 0, and Shift+F10 for actions</small></div>
+      <div className="field-notes"><p className="eyebrow">CHART CONTROLS</p><p>Click the expedition boat to select it<br />Right click lit water to move it<br />Right click a lighthouse for actions, including Send expedition here<br />Click a lighthouse for details<br />Drag to explore<br />Scroll to zoom<br />Reset view to return home</p><small>Keyboard: arrow keys, + / −, 0, Shift+F10 for actions, and expedition destination buttons</small></div>
     </aside></div>
     <footer><span>FIRST LIGHT <span className="footer-divider">/</span> PROTOTYPE 0.1</span><span>{world ? `${world.islands.filter(island => isDiscovered(world, island.position)).length} islands · ${world.lighthouses.filter(light => isDiscovered(world, light.position)).length} beacons` : 'Establishing connection'}</span></footer>
   </main>;

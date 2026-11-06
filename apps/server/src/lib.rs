@@ -1,4 +1,5 @@
 pub mod domain;
+pub mod expedition;
 mod geometry;
 pub mod health;
 mod network;

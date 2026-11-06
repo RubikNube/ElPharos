@@ -9,7 +9,7 @@ import { isNetworkIlluminated } from '../state/worldQueries';
 
 function fixture() {
   const world = researchWorldFixture();
-  world.lighthouses = [{ id: 'patient', island_id: 'island-2', name: 'Amber Light', position: { x: 1250, y: 650 }, radius: 400, effective_radius: 300, active: true, explored_radius: 400, sick: true, immune_until: 300, specialization: null, connected: false, fuel_upkeep: 1.5, next_fuel_upkeep: 1.75 }];
+  world.lighthouses = [{ id: 'patient', island_id: 'island-2', name: 'Amber Light', position: { x: 1250, y: 650 }, radius: 400, effective_radius: 300, active: true, explored_radius: 400, sick: true, immune_until: 300, visited: true, secured: false, specialization: null, connected: false, fuel_upkeep: 1.5, next_fuel_upkeep: 1.75 }];
   return world;
 }
 

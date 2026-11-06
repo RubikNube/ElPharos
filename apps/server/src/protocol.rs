@@ -1,11 +1,21 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 14;
+pub const VERSION: u8 = 15;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    OrderExpedition {
+        protocol_version: u8,
+        destination: crate::domain::Point,
+        lighthouse_id: Option<String>,
+    },
+    ChooseExpedition {
+        protocol_version: u8,
+        lighthouse_id: String,
+        choice: crate::expedition::Choice,
+    },
     WardVeilTarget {
         protocol_version: u8,
         lighthouse_id: String,
@@ -68,7 +78,13 @@ pub enum ClientMessage {
 impl ClientMessage {
     pub fn version(&self) -> u8 {
         match self {
-            ClientMessage::WardVeilTarget {
+            ClientMessage::OrderExpedition {
+                protocol_version, ..
+            }
+            | ClientMessage::ChooseExpedition {
+                protocol_version, ..
+            }
+            | ClientMessage::WardVeilTarget {
                 protocol_version, ..
             }
             | ClientMessage::SendDoctor {
@@ -172,6 +188,7 @@ fn serialize_snapshot<S: serde::Serializer>(
     }
     #[derive(Serialize)]
     struct Snapshot<'a> {
+        expedition: ExpeditionSnapshot<'a>,
         veil: Option<VeilSnapshot<'a>>,
         doctor: &'a Option<crate::health::DoctorVoyage>,
         voyages: &'a crate::voyages::VoyageTraffic,
@@ -201,6 +218,14 @@ fn serialize_snapshot<S: serde::Serializer>(
         ward_fuel: u32,
         complete: bool,
     }
+    #[derive(Serialize)]
+    struct ExpeditionSnapshot<'a> {
+        #[serde(flatten)]
+        state: &'a crate::expedition::Expedition,
+        route: Vec<crate::domain::Point>,
+        blocked: bool,
+        speed: f64,
+    }
     let network = crate::network::NetworkView::new(world);
     let connected = &network.connected;
     let shipping_links = network
@@ -212,6 +237,19 @@ fn serialize_snapshot<S: serde::Serializer>(
         })
         .collect();
     Snapshot {
+        expedition: {
+            let boat = world.expedition.as_ref().expect("validated expedition");
+            let route = boat
+                .destination
+                .as_ref()
+                .and_then(|dest| world.expedition_route(&boat.position, dest));
+            ExpeditionSnapshot {
+                state: boat,
+                blocked: boat.destination.is_some() && route.is_none(),
+                route: route.unwrap_or_default(),
+                speed: crate::expedition::SPEED,
+            }
+        },
         veil: world.veil.as_ref().map(|state| VeilSnapshot {
             state,
             ward_fuel: crate::veil::WARD_FUEL,

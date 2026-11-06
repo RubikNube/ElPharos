@@ -61,16 +61,21 @@ export function WorldMap({ commands }: { commands: WorldCommands }) {
     let unsubscribe: (() => void) | undefined;
     void createScene(host.current!, abort.signal, selectedId => useWorldStore.setState({ selectedId }), target => {
       if (!abort.signal.aborted) setHover(target);
-    }, target => { setHover(null); setMenu(target); }, () => setMenu(null), () => useWorldStore.getState().selectedId).then((created) => {
+    }, target => { setHover(null); setMenu(target); }, () => setMenu(null), () => useWorldStore.getState().selectedId,
+    () => useWorldStore.setState({ boatSelected: true }),
+    (destination, lighthouseId) => commands.orderExpedition(destination, lighthouseId),
+    () => useWorldStore.getState().boatSelected).then((created) => {
       if (abort.signal.aborted) { created?.dispose(); return; }
       scene.current = created;
       if (!created) return;
       const state = useWorldStore.getState();
       created.setWorld(state.world);
       created.setSelection(state.selectedId);
+      created.setBoatSelected(state.boatSelected);
       unsubscribe = useWorldStore.subscribe((state, previous) => {
         if (state.world !== previous.world) created.setWorld(state.world);
         if (state.selectedId !== previous.selectedId) created.setSelection(state.selectedId);
+        if (state.boatSelected !== previous.boatSelected) created.setBoatSelected(state.boatSelected);
       });
     }).catch(() => {
       if (!abort.signal.aborted) setError('The map could not start. Please use a browser with WebGL enabled.');
@@ -80,7 +85,7 @@ export function WorldMap({ commands }: { commands: WorldCommands }) {
 
   return <section className="map-panel" aria-label="Ocean map">
     <div className="map" ref={host} tabIndex={0} role="region"
-      aria-label="World map. Hover over a lighthouse or ship for status, click a lighthouse to select, or right click or long press it for actions. Drag or use arrow keys to pan. Scroll or press plus and minus to zoom. Press zero to reset." />
+      aria-label="World map. Click the expedition boat to select it, then right click lit water to move. Right click a lighthouse for its action menu, including Send expedition here. On touch, tap the destination. Click a lighthouse for details. Drag or use arrow keys to pan. Scroll or press plus and minus to zoom. Press zero to reset." />
     {hover && !menu && <HoverCard key={hover.identity} target={hover} />}
     {menu && world && <LighthouseContextMenu key={menu.id} world={world} id={menu.id} x={menu.x} y={menu.y} connected={connection === 'connected'} commands={commands} onClose={() => { setMenu(null); host.current?.focus(); }} />}
     <div className="map-caption"><span>THE OPEN OCEAN</span><small>An archipelago waiting for light.</small></div>

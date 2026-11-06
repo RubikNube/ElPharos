@@ -83,7 +83,7 @@ it('updates selection and camera without rebuilding terrain and disposes resourc
   scene.zoom(1.25);
   scene.reset();
   expect(mocks.build).toHaveBeenCalledWith(world, 'terrain');
-  expect(mocks.selection).toHaveBeenLastCalledWith(expect.anything(), world, 'beacon-1');
+  expect(mocks.selection).toHaveBeenLastCalledWith(expect.anything(), world, 'beacon-1', false);
   expect(mocks.animate).toHaveBeenCalledOnce();
   scene.dispose();
   scene.dispose();

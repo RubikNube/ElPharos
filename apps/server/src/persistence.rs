@@ -11,7 +11,7 @@ struct Save {
 
 mod migrations;
 pub use crate::validation::validate;
-const SAVE_VERSION: u8 = 11;
+const SAVE_VERSION: u8 = 12;
 
 pub fn save(path: &Path, world: &WorldState) -> Result<(), String> {
     validate(world)?;
@@ -160,7 +160,7 @@ mod economy_tests {
             serde_json::to_value(&world).unwrap()
         );
         let written: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(written["save_version"], 11);
+        assert_eq!(written["save_version"], 12);
         assert!(
             written["world"]["lighthouses"][0]
                 .get("fuel_upkeep")

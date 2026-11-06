@@ -31,11 +31,11 @@ it('draws cross-seam light masks and ships on both sides of the tile', () => {
   world.lighthouses = [10, 990].map((x, index) => ({
     id: String(index), island_id: String(index), name: 'Light', position: { x, y: 500 },
     radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true,
-    sick: false, immune_until: 300, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
+    sick: false, immune_until: 300, visited: true, secured: false, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
   }));
   world.shipping_links = [{ from: '0', to: '1' }];
   const built = buildWorldLayers(world);
-  expect(built.ships.map(ship => [ship.from.x, ship.to.x])).toEqual([[10, -10], [1010, 990]]);
+  expect(built.ships.filter(ship => ship.id?.startsWith('legacy:')).map(ship => [ship.from.x, ship.to.x])).toEqual([[10, -10], [1010, 990]]);
   const masks = built.worldLayer.children.filter(child => 'circles' in child) as unknown as { circles: number[][] }[];
   expect(masks.some(mask => mask.circles.some(([x]) => x === -10))).toBe(true);
   expect(masks.some(mask => mask.circles.some(([x]) => x === 1010))).toBe(true);
@@ -48,10 +48,10 @@ it('uses the same half-span route direction in every visible copy', () => {
   world.lighthouses = [0, 500].map((x, index) => ({
     id: String(index), island_id: String(index), name: 'Light', position: { x, y: 500 },
     radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true,
-    sick: false, immune_until: 300, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
+    sick: false, immune_until: 300, visited: true, secured: false, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
   }));
   world.shipping_links = [{ from: '0', to: '1' }];
-  expect(buildWorldLayers(world).ships.every(ship => ship.to.x-ship.from.x === 500)).toBe(true);
+  expect(buildWorldLayers(world).ships.filter(ship => ship.id?.startsWith('legacy:')).every(ship => ship.to.x-ship.from.x === 500)).toBe(true);
 });
 
 it('renders an ambient voyage on both copies of a seam crossing', () => {
@@ -61,7 +61,7 @@ it('renders an ambient voyage on both copies of a seam crossing', () => {
   world.lighthouses = [10, 990].map((x, index) => ({
     id: String(index), island_id: String(index), name: 'Light', position: { x, y: 500 },
     radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true,
-    sick: false, immune_until: 300, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
+    sick: false, immune_until: 300, visited: true, secured: false, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
   }));
   world.shipping_links = [{ from: '0', to: '1' }];
   world.voyages.ships = [{ id: 1, kind: 'mail', message_id: 0, origin: '0', destination: '1', from: '0', to: '1', progress: 0.5, phase: 'outbound', visit_timer: 0 }];
@@ -75,7 +75,7 @@ it('draws the Veil warning on each visible copy across the seam', () => {
   world.lighthouses = [{
     id: 'target', island_id: 'remote', name: 'Target', position: { x: 10, y: 500 },
     radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true,
-    sick: false, immune_until: 300, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
+    sick: false, immune_until: 300, visited: true, secured: false, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
   }];
   world.veil!.target = 'target'; world.veil!.approach_remaining = 60;
   const drawn = buildWorldLayers(world, 'ships').shipLayer.children as unknown as { circles: number[][] }[];

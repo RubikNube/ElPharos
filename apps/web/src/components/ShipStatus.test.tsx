@@ -8,7 +8,7 @@ it('shows ambient voyage status and its stable story message', () => {
   world.lighthouses = ['First Light', 'Amber Light'].map((name, i) => ({
     id: `beacon-${i}`, island_id: `island-${i}`, name, position: { x: 100 + i * 100, y: 100 },
     radius: 290, effective_radius: 290, explored_radius: 290, active: true, connected: true,
-    sick: false, immune_until: 300, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
+    sick: false, immune_until: 300, visited: true, secured: false, specialization: null, fuel_upkeep: 1, next_fuel_upkeep: 1.25,
   }));
   world.shipping_links = [{ from: 'beacon-0', to: 'beacon-1' }];
   const ship = { id: 1, kind: 'mail' as const, message_id: 0, origin: 'beacon-0', destination: 'beacon-1', from: 'beacon-0', to: 'beacon-1', progress: 0.5, phase: 'outbound' as const, visit_timer: 0 };

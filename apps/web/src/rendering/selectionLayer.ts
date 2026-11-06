@@ -3,9 +3,10 @@ import { Container, Graphics } from 'pixi.js';
 import type { WorldState } from '../protocol';
 import { isDiscovered } from './visibility';
 
-export function drawSelection(overlay: Container, world: WorldState | null, selectedId: string | null) {
+export function drawSelection(overlay: Container, world: WorldState | null, selectedId: string | null, boatSelected = false) {
   for (const child of overlay.removeChildren()) child.destroy({ children: true });
   if (!world) return;
+    if (boatSelected) for (const position of images(world, world.expedition.position, -32, -32, world.width+32, world.height+32)) overlay.addChild(new Graphics().circle(position.x, position.y, 27).stroke({ color: 0x9ae6d1, width: 3 }));
     const selected = world.lighthouses.find(light => light.id === selectedId && isDiscovered(world, light.position));
     if (selected) for (const position of images(world, selected.position, -world.radius_max, -world.radius_max, world.width+world.radius_max, world.height+world.radius_max)) overlay.addChild(new Graphics().circle(position.x, position.y, 45).stroke({ color: 0xffffff, width: 3 }));
     if (selected && selected.radius < world.radius_max) {

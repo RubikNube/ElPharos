@@ -13,7 +13,7 @@ type Props = { world: WorldState; selectedId: string | null; connection: WorldSt
 export function LighthousePanel({ world, selectedId, connection, commands, onSelect }: Props) {
   const { lighthouse, island, yard, ship } = lighthouseSelection(world, selectedId);
   const facilityBlock = facilityBlockedReason(world, island, connection === 'connected');
-  const cannotLight = !!lighthouse && !lighthouse.active && world.economy.fuel < networkUpkeep(world) + lighthouse.fuel_upkeep;
+  const cannotLight = !!lighthouse && !lighthouse.active && (!lighthouse.visited || world.economy.fuel < networkUpkeep(world) + lighthouse.fuel_upkeep);
   return <>
       <p className="eyebrow">LIGHTHOUSE NETWORK</p>
       <h2>{lighthouse?.name ?? 'Select a lighthouse'}</h2>
@@ -28,8 +28,9 @@ export function LighthousePanel({ world, selectedId, connection, commands, onSel
         </section>}
         <p className="hint">{lighthouse.connected ? 'Connected to First Haven' : 'Isolated from First Haven'}</p>
         <p className="hint">Beacon upkeep: {lighthouse.fuel_upkeep} fuel/s{!lighthouse.active && ' when lit'}.</p>
-        {cannotLight && <p role="status">Not enough fuel for one second of network upkeep.</p>}
+        {cannotLight && <p role="status">{!lighthouse.visited ? 'Send the expedition boat here and resolve its arrival choice before lighting.' : 'Not enough fuel for one second of network upkeep.'}</p>}
         <div className="beacon-status"><span className={lighthouse.active ? 'lit' : ''}>◉</span><strong>{lighthouse.active ? 'Beacon illuminated' : 'Beacon extinguished'}</strong></div>
+        <p className="hint">{lighthouse.visited ? 'Visited by expedition' : 'Awaiting expedition'}{lighthouse.secured && ' · Secured: −0.25 fuel/s upkeep'}</p>
         <KeeperStatus key={lighthouse.id} world={world} light={lighthouse} />
         <DoctorPanel world={world} light={lighthouse} connected={connection === 'connected'} commands={commands} />
         <dl><div><dt>Island</dt><dd>{world.islands.find((island) => island.id === lighthouse.island_id && isDiscovered(world, island.position))?.name ?? 'Uncharted island'}</dd></div>

@@ -104,7 +104,7 @@ try:
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.2)
     veil_saved = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
-    assert veil_saved['save_version'] == 11 and veil_saved['world']['veil']['ward_remaining'] > 0
+    assert veil_saved['save_version'] == 12 and veil_saved['world']['veil']['ward_remaining'] > 0
     veil_saved['world']['veil'].update(approach_remaining=1, ward_remaining=0)
     veil_saved['world']['economy']['paused'] = False
     Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(veil_saved))
@@ -179,7 +179,7 @@ try:
     js("document.querySelector('.save-controls button').click()")
     time.sleep(.2)
     vessel_saved = json.loads(Path(os.environ['EL_PHAROS_SAVE_PATH']).read_text())
-    assert vessel_saved['save_version'] == 11
+    assert vessel_saved['save_version'] == 12
     assert vessel_saved['world']['salvage']['vessel']['phase'] == 'outbound'
     vessel_saved['world']['salvage']['vessel'].update(phase='returning', timer=4, cargo=40, enabled=False)
     vessel_saved['world']['economy']['paused'] = False
@@ -272,6 +272,18 @@ try:
     js("document.querySelector('[aria-label=\"Salvage yard\"] button').click()")
     time.sleep(.2)
     assert js("return document.body.innerText.includes('Salvage: 60 / 300')")
+    assert js("return document.querySelector('.primary').disabled")
+    js("Array.from(document.querySelectorAll('[aria-label=\"Expedition destinations\"] button')).find(b => b.textContent.includes('Wreckers')).click()")
+    for _ in range(100):
+        if js("return document.querySelector('.expedition-choice') !== null"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Expedition did not arrive at Wreckers Cove')
+    js("document.querySelector('.map').focus(); document.querySelector('.map').dispatchEvent(new KeyboardEvent('keydown',{key:'F10',shiftKey:true,bubbles:true}))")
+    assert js("return [...document.querySelectorAll('.lighthouse-context-menu button')].some(b => b.textContent.startsWith('Explore'))")
+    assert js("return [...document.querySelectorAll('.lighthouse-context-menu button')].some(b => b.textContent.startsWith('Secure'))")
+    js("Array.from(document.querySelectorAll('.lighthouse-context-menu button')).find(b => b.textContent.startsWith('Explore')).click()")
+    time.sleep(.2)
+    assert js("return !document.querySelector('.primary').disabled")
     js("document.querySelector('.primary').click()")
     for _ in range(150):
         if js("return document.querySelector('[aria-label=\"Salvage yard\"]').innerText.includes('Delivering to Haven')"): break
@@ -310,6 +322,14 @@ try:
     assert js("return document.querySelectorAll('nav button').length") == 4
     js("document.querySelectorAll('nav button')[1].click()")
     assert js("return document.querySelector('h2').innerText.includes('Amber Shoal')")
+    assert js("return document.querySelector('.primary').disabled")
+    js("Array.from(document.querySelectorAll('[aria-label=\"Expedition destinations\"] button')).find(b => b.textContent.includes('Amber')).click()")
+    for _ in range(120):
+        if js("return document.querySelector('.expedition-choice') !== null"): break
+        time.sleep(.1)
+    else: raise RuntimeError('Expedition did not arrive at Amber Shoal')
+    js("document.querySelector('.expedition-choice button').click()")
+    time.sleep(.2)
     js("document.querySelector('.primary').click()")
     time.sleep(.2)
     assert js("return document.body.innerText.includes('Beacon illuminated')")
@@ -353,12 +373,16 @@ try:
     js("document.querySelector('.map-controls button:nth-child(2)').click()")
     # Reset centers the first lighthouse without exposing unexplored map dimensions.
     coords = js("const r=document.querySelector('.map').getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2]")
+    js("document.querySelector('.expedition-panel > button').click()")
     js("const m=document.querySelector('.map'), r=m.getBoundingClientRect(); m.dispatchEvent(new MouseEvent('contextmenu',{clientX:r.x+r.width/2,clientY:r.y+r.height/2,bubbles:true,cancelable:true}))")
     assert js("return document.querySelector('.lighthouse-context-menu')?.getAttribute('aria-label') === 'First Light actions'")
+    assert js("return [...document.querySelectorAll('.lighthouse-context-menu button')].some(b => b.textContent.includes('Send expedition here'))")
+    assert js("return document.querySelector('.expedition-panel [role=status]').innerText.includes('Waiting for orders')")
     assert js("return [...document.querySelectorAll('.lighthouse-context-menu button')].some(b => b.textContent.includes('Expand radius'))")
     assert js("const c=document.querySelector('.lighthouse-context-menu').getBoundingClientRect(), m=document.querySelector('.map').getBoundingClientRect(); return c.left>=m.left && c.right<=m.right && c.top>=m.top && c.bottom<=m.bottom")
     js("document.querySelector('.lighthouse-context-menu').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))")
     assert js("return !document.querySelector('.lighthouse-context-menu')")
+    js("document.querySelector('.expedition-panel > button').click()")
     # Scroll across multiple world periods on both axes and click the visible Haven copy.
     js("document.querySelector('.map').addEventListener('pointerdown', event => { window.wrapPointerId=event.pointerId; }, {once:true})")
     req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerMove','duration':0,'x':round(coords[0]),'y':round(coords[1])},{'type':'pointerDown','button':0}]}]})
@@ -394,6 +418,7 @@ try:
     for light in fixture['world']['lighthouses']:
         light['active'] = True
         light['explored_radius'] = light['radius']
+        light['visited'] = True
     Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(fixture))
     js("document.querySelectorAll('.save-controls button')[1].click()")
     for _ in range(50):
@@ -418,7 +443,7 @@ try:
     for island in fixture['world']['islands'][1:]:
         island['fuel_facility'] = 'ruined'
     for i, light in enumerate(fixture['world']['lighthouses']):
-        light.update(active=i == 0, radius=290, explored_radius=290 if i == 0 else 0)
+        light.update(active=i == 0, radius=290, explored_radius=290)
     Path(os.environ['EL_PHAROS_SAVE_PATH']).write_text(json.dumps(fixture))
     js("document.querySelectorAll('.save-controls button')[1].click()")
     time.sleep(.3)
@@ -446,6 +471,7 @@ try:
     assert js("return document.querySelector('.resource.fuel').title.includes('Production: +11/s')")
     screenshot('complete-network')
     # Losing and restoring the anchor updates the objective and production.
+    js("if(document.querySelector('.pause').innerText === 'Pause') document.querySelector('.pause').click()")
     js("document.querySelectorAll('nav button')[0].click()")
     time.sleep(.15)
     js("document.querySelector('.primary').click()")

@@ -73,6 +73,8 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
             || light.explored_radius < 0.0
             || light.explored_radius > light.radius
             || (light.active && light.explored_radius < light.effective_radius())
+            || (light.active && !light.visited)
+            || (light.secured && !light.visited)
             || light.immune_until > crate::domain::MAX_SAFE_INTEGER
             || (light.sick && light.explored_radius == 0.0)
         {
@@ -84,5 +86,6 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
     crate::salvage::validate(world)?;
     crate::voyages::validate(world)?;
     crate::veil::validate(world)?;
+    crate::expedition::validate(world)?;
     Ok(())
 }

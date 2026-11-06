@@ -100,6 +100,21 @@ export function buildWorldLayers(world: WorldState, pass: 'all' | 'terrain' | 's
         ships.push({ id: `legacy:${link.from}:${link.to}`, legacy: link, graphic, from: from.position, to: to.position, offset: index * 0.37 });
       }
       if (pass === 'terrain') continue;
+      const expedition = world.expedition;
+      const boatFrom = shifted(expedition.position);
+      let previous = boatFrom;
+      for (const waypoint of expedition.route) {
+        const next = nearest(world, previous, waypoint);
+        if (intersectsTile(previous, next)) shipLayer.addChild(new Graphics().moveTo(previous.x, previous.y).lineTo(next.x, next.y).stroke({ color: 0x9ae6d1, alpha: 0.5, width: 2 }));
+        previous = next;
+      }
+      if (boatFrom.x >= -40 && boatFrom.x <= world.width + 40 && boatFrom.y >= -40 && boatFrom.y <= world.height + 40) {
+        const first = expedition.route.find(point => distance(world, expedition.position, point) > 0.001);
+        const boatTo = first ? nearest(world, boatFrom, first) : boatFrom;
+        const graphic = new Graphics().poly([18, 0, -10, -8, -16, 0, -10, 8]).fill(0x9ae6d1).stroke({ color: 0x081521, width: 2 }).rect(-4, -5, 7, 10).fill(0xffe8b0);
+        shipLayer.addChild(graphic);
+        ships.push({ id: 'expedition', graphic, from: boatFrom, to: boatTo, offset: 0, expedition });
+      }
       for (const cargo of world.salvage?.ships ?? []) {
         const source = world.lighthouses.find(l => l.id === cargo.from), target = world.lighthouses.find(l => l.id === cargo.to);
         const from = source && { ...source, position: shifted(source.position) };

@@ -32,6 +32,11 @@ export function ShipStatus({ world, id }: { world: WorldState; id: string }) {
     return lines[Math.floor(Math.random() * lines.length)];
   });
   const name = (lightId: string) => world.lighthouses.find(l => l.id === lightId)?.name ?? lightId;
+  if (id === 'expedition') {
+    const boat = world.expedition;
+    const status = boat.pending_choice ? `Awaiting a choice at ${name(boat.pending_choice)}` : boat.securing ? `Securing ${name(boat.securing)} · ${boat.secure_remaining}s` : boat.blocked ? 'Waiting for a safe route' : boat.destination ? 'Sailing to destination' : 'Waiting for orders';
+    return <><strong>Expedition boat</strong><p>{world.economy.paused ? 'Paused' : status}</p><small>Select the boat to give it orders.</small></>;
+  }
   if (id.startsWith('voyage:')) {
     const ship = world.voyages.ships.find(s => `voyage:${s.id}` === id);
     if (!ship) return null;

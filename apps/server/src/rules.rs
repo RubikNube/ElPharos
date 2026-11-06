@@ -85,12 +85,14 @@ impl WorldState {
     }
 
     pub fn lighthouse_upkeep_at_radius(&self, light: &Lighthouse, radius: f64) -> f64 {
-        Lighthouse::upkeep_at_radius(radius)
+        (Lighthouse::upkeep_at_radius(radius)
             - if light.specialization == Some(Specialization::EfficientLamp) {
                 self.effective_rules().efficiency_saving
             } else {
                 0.0
             }
+            - if light.secured { 0.25 } else { 0.0 })
+        .max(0.25)
     }
 
     pub fn restored_fuel_production(&self) -> u32 {

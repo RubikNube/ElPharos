@@ -22,6 +22,10 @@ pub enum Specialization {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lighthouse {
+    #[serde(default = "default_visited")]
+    pub visited: bool,
+    #[serde(default)]
+    pub secured: bool,
     pub sick: bool,
     pub immune_until: u64,
     #[serde(default)]
@@ -33,6 +37,10 @@ pub struct Lighthouse {
     pub radius: f64,
     pub active: bool,
     pub explored_radius: f64,
+}
+
+fn default_visited() -> bool {
+    true
 }
 
 impl Lighthouse {
@@ -104,6 +112,8 @@ impl Default for Economy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldState {
+    #[serde(default)]
+    pub expedition: Option<crate::expedition::Expedition>,
     #[serde(default)]
     pub veil: Option<crate::veil::Veil>,
     pub doctor: Option<crate::health::DoctorVoyage>,
@@ -284,6 +294,7 @@ impl WorldState {
             e.fuel -= upkeep;
         }
         self.tick_veil();
+        self.tick_expedition();
         self.tick_salvage();
         self.tick_salvage_vessel();
         self.tick_voyages();
@@ -351,6 +362,9 @@ impl WorldState {
             .iter()
             .find(|l| l.id == id)
             .ok_or("Unknown lighthouse")?;
+        if active && !light.active && !light.visited {
+            return Err("Send the expedition to this lighthouse first");
+        }
         if active
             && !light.active
             && self.economy.fuel

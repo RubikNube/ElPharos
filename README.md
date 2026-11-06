@@ -10,7 +10,8 @@ and automatic cargo deliveries. Exactly one salvage island is visible from Haven
 at the start. Every island can be discovered, restored, and connected through
 successive lighthouse radius upgrades. A connected network at radius 470 is
 guaranteed to have sufficient restored fuel production without research or
-specializations. Islands have separated shorelines and the map fits the generated
+specializations. A starting expedition boat must visit each new lighthouse before
+it can be lit. Islands have separated shorelines and the map fits the generated
 archipelago. Startup and Restart generate a fresh layout; loading preserves the
 saved map. See **Salvage and cargo expansion** below for the new economy.
 Existing saves retain their original layouts; formats 1–4 use the four-island
@@ -60,6 +61,7 @@ Keeper names remain stable after loading. Their moods reflect darkness, low fuel
 isolation, or a healthy connection, with a random remark suited to each mood.
 The selected lighthouse's keeper also appears in the side panel.
 Use **Extinguish beacon / Light the beacon** to change its illumination.
+Remote beacons require an expedition visit and arrival choice before first lighting.
 **Expand radius** adds 60 units with no upfront cost, up to 650 units. Inactive beacons can
 be upgraded, but only active illumination reveals new areas.
 
@@ -105,9 +107,9 @@ automatically. The side panel shows fuel, rates, pause status, and shortage feed
 Saves include fuel, elapsed simulation time, and explicit pause state. Older
 format-1 saves migrate on load with the starting economy defaults; format-2 saves
 preserve their fuel balances. Both adopt radius-based upkeep. Formats 1–3 migrate with First Haven operational and all other facilities ruined.
-New saves use format 11 and persist Veil fronts, keeper health, doctor voyages, ambient shipping voyages, facilities, Salvage, specializations, salvage vessels, and
+New saves use format 12 and persist expeditions, Veil fronts, keeper health, doctor voyages, ambient shipping voyages, facilities, Salvage, specializations, salvage vessels, and
 research rather than derived production. Save formats 1–10 remain supported.
-Wire protocol 14 requires matching client and server versions.
+Wire protocol 15 requires matching client and server versions.
 
 ## Connected shipping and scenario goal
 
@@ -280,7 +282,7 @@ as well as restoring every fuel facility and connecting all beacons
 with sustainable fuel. Production timers and cargo in transit are saved.
 Formats 1–4 retain their original map, free expansion, and objective under a
 legacy ruleset, which remains in effect after saving again. Current saves use
-format 11 and matching clients and servers use wire protocol 14. The older sections
+format 12 and matching clients and servers use wire protocol 15. The older sections
 above describe the original four-island scenario; these rules supersede them for
 new games. Base Salvage constants live in `apps/server/src/salvage.rs`;
 `apps/server/src/rules.rs` collects effective rules for simulation and snapshots.
@@ -360,11 +362,11 @@ the next tick. Expanded holds affect subsequent loading and do not create extra
 cargo in ships already sailing. Fuel, costs, previews, cargo animation, and ETA
 all reflect effective server rules.
 
-New saves use **format 11**, persisting Veil fronts, keeper health, doctor voyages, and ambient shipping voyages alongside completed technology IDs and the
+New saves use **format 12**, persisting expedition state, Veil fronts, keeper health, doctor voyages, ambient shipping voyages, and completed technology IDs alongside the
 existing world. Loading formats 5–6 adds empty research to Salvage worlds and
 reveals archives already covered by exploration. Formats 1–4 and resaved worlds
 without Salvage retain their legacy gameplay with no research. Matching clients
-and servers use **wire protocol 14**. These rules supersede earlier version and
+and servers use **wire protocol 15**. These rules supersede earlier version and
 balance descriptions above where an upgrade applies.
 
 Use **Restart** beside Save and Load to start a fresh shared game. Confirming resets progress for every connected tab and keeps the existing save slot. When all scenario objectives are met, a victory notification appears. Choose **Continue playing** to dismiss it and keep managing the archipelago; the simulation continues after victory.
@@ -404,3 +406,25 @@ continue after completion. Veil timers freeze with the shared simulation pause
 or when all players disconnect. The current front, ward, and progress survive
 save/load; Restart starts fresh. Legacy worlds without Salvage retain their
 original rules. This milestone uses save format **11** and wire protocol **14**.
+
+## Player expedition boat
+
+Each new game starts with one player-controlled boat at First Haven, separate from
+automatic cargo, salvage, doctor, and ambient ships. Select the boat on the map or
+in the Expedition panel. Right-click lit water to order it there, or right-click
+a lighthouse and choose **Send expedition here** from its context menu. On touch,
+tap the destination while the boat is selected. The panel also
+lists lighthouse destinations for keyboard use. A new order replaces the old one.
+The boat travels at 75 world units per simulation second through the connected
+light network, including across wrapped map edges. It waits if an outage removes
+its route, then resumes when a route returns. Movement and securing stop while
+paused or when no players are connected.
+
+On first arrival at a lighthouse, choose **Explore** for up to 20 Salvage (20 fuel
+in old games without Salvage), limited by storage capacity, or **Secure** to hold
+the boat there for 30 seconds and permanently reduce that beacon's upkeep by 0.25
+fuel/second. Either choice immediately and permanently permits lighting it; the
+boat stays until ordered again. First Haven is already visited. Older saves mark
+previously lit beacons as visited from their exploration history, while unlit
+beacons require a visit. Save format **12** and wire protocol **15** include this
+state.

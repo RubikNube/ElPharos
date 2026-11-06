@@ -5,7 +5,7 @@ import { keeperIdentity, keeperMood, keeperName, pickRemark, remarks, type Light
 const light: Lighthouse = {
   id: 'beacon-1', island_id: 'island-1', name: 'First Light', position: { x: 100, y: 100 },
   active: true, connected: true, radius: 290, effective_radius: 290, sick: false, immune_until: 300, explored_radius: 290,
-  specialization: null, fuel_upkeep: 1.25, next_fuel_upkeep: 1.5,
+  visited: true, secured: false, specialization: null, fuel_upkeep: 1.25, next_fuel_upkeep: 1.5,
 };
 
 it('keeps keeper identity and name stable across snapshots and save round trips', () => {
