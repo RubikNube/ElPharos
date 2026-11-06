@@ -318,6 +318,12 @@ try:
     js("document.querySelector('.map-controls button:nth-child(2)').click()")
     # Reset centers the first lighthouse without exposing unexplored map dimensions.
     coords = js("const r=document.querySelector('.map').getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2]")
+    js("const m=document.querySelector('.map'), r=m.getBoundingClientRect(); m.dispatchEvent(new MouseEvent('contextmenu',{clientX:r.x+r.width/2,clientY:r.y+r.height/2,bubbles:true,cancelable:true}))")
+    assert js("return document.querySelector('.lighthouse-context-menu')?.getAttribute('aria-label') === 'First Light actions'")
+    assert js("return [...document.querySelectorAll('.lighthouse-context-menu button')].some(b => b.textContent.includes('Expand radius'))")
+    assert js("const c=document.querySelector('.lighthouse-context-menu').getBoundingClientRect(), m=document.querySelector('.map').getBoundingClientRect(); return c.left>=m.left && c.right<=m.right && c.top>=m.top && c.bottom<=m.bottom")
+    js("document.querySelector('.lighthouse-context-menu').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))")
+    assert js("return !document.querySelector('.lighthouse-context-menu')")
     # Scroll across multiple world periods on both axes and click the visible Haven copy.
     js("document.querySelector('.map').addEventListener('pointerdown', event => { window.wrapPointerId=event.pointerId; }, {once:true})")
     req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerMove','duration':0,'x':round(coords[0]),'y':round(coords[1])},{'type':'pointerDown','button':0}]}]})

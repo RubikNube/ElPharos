@@ -1,6 +1,7 @@
 import type { WorldState } from '../protocol';
 import type { Camera } from './camera';
 import { createLighthouseHover, lighthouseAt, type LighthouseHover } from './lighthouseHover';
+import { isDiscovered } from './visibility';
 
 type Options = {
   getCamera: () => Camera;
@@ -9,42 +10,69 @@ type Options = {
   zoom: (factor: number, x?: number, y?: number) => void;
   reset: () => void;
   onSelect: (id: string | null) => void;
+  onContextMenu?: (target: { id: string; x: number; y: number }) => void;
+  onMapNavigate?: () => void;
+  getSelectedId?: () => string | null;
   onHover?: (hover: LighthouseHover) => void;
   shipAt?: (x: number, y: number) => { id: string; x: number; y: number } | null;
 };
 
-export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld, render, zoom, reset, onSelect, onHover = () => {}, shipAt }: Options) {
+export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld, render, zoom, reset, onSelect, onContextMenu, onMapNavigate, getSelectedId, onHover = () => {}, shipAt }: Options) {
   const hover = createLighthouseHover(host, getWorld, getCamera, onHover, shipAt);
   let drag: { id: number; x: number; y: number; startX: number; startY: number; moved: boolean } | null = null;
+  let longPress: ReturnType<typeof setTimeout> | undefined;
+  let longPressed = false;
+  const cancelLongPress = () => { clearTimeout(longPress); longPress = undefined; };
+  const openMenu = (id: string, clientX: number, clientY: number) => {
+    const bounds = host.getBoundingClientRect();
+    hover.clear();
+    onSelect(id);
+    onContextMenu?.({ id, x: clientX - bounds.left, y: clientY - bounds.top });
+  };
   const down = (event: PointerEvent) => {
     if (event.button !== 0 || drag) return;
+    onMapNavigate?.();
     hover.clear();
     host.focus();
     host.setPointerCapture(event.pointerId);
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
+    longPressed = false;
+    if (event.pointerType === 'touch' && getWorld()) {
+      const hit = lighthouseAt(host, getWorld(), getCamera(), event.clientX, event.clientY);
+      if (hit) longPress = setTimeout(() => {
+        longPress = undefined;
+        longPressed = true;
+        openMenu(hit.id, event.clientX, event.clientY);
+      }, 500);
+    }
     host.classList.add('dragging');
   };
   const move = (event: PointerEvent) => {
     if (!drag) { hover.move(event); return; }
     if (drag.id !== event.pointerId) return;
     drag.moved ||= Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6;
+    if (drag.moved) cancelLongPress();
     getCamera().x += event.clientX - drag.x;
     getCamera().y += event.clientY - drag.y;
     drag.x = event.clientX; drag.y = event.clientY;
     render();
   };
   const up = (event: PointerEvent) => {
+    cancelLongPress();
     if (event.type !== 'pointerup') hover.clear();
     if (drag?.id !== event.pointerId) return;
-    if (event.type === 'pointerup' && !drag.moved && getWorld()) {
+    if (event.type === 'pointerup' && !drag.moved && !longPressed && getWorld()) {
       const hit = lighthouseAt(host, getWorld(), getCamera(), event.clientX, event.clientY);
       onSelect(hit?.id ?? null);
     }
     drag = null;
+    longPressed = false;
     if (host.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
     host.classList.remove('dragging');
   };
   const wheel = (event: WheelEvent) => {
+    cancelLongPress();
+    onMapNavigate?.();
     hover.clear();
     event.preventDefault();
     const bounds = host.getBoundingClientRect();
@@ -52,6 +80,19 @@ export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld
     zoom(Math.exp(-Math.max(-500, Math.min(500, delta)) * 0.0015), event.clientX - bounds.left, event.clientY - bounds.top);
   };
   const key = (event: KeyboardEvent) => {
+    if ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu') {
+      const world = getWorld();
+      const light = world?.lighthouses.find(light => light.id === getSelectedId?.() && isDiscovered(world, light.position));
+      if (light) {
+        event.preventDefault();
+        const bounds = host.getBoundingClientRect();
+        const x = Math.max(8, Math.min(bounds.width - 8, getCamera().x + light.position.x * getCamera().zoom));
+        const y = Math.max(8, Math.min(bounds.height - 8, getCamera().y + light.position.y * getCamera().zoom));
+        openMenu(light.id, bounds.left + x, bounds.top + y);
+      }
+      return;
+    }
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-', '0'].includes(event.key)) onMapNavigate?.();
     if (['Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-', '0'].includes(event.key)) hover.clear();
     const shifts: Record<string, [number, number]> = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] };
     if (shifts[event.key]) {
@@ -63,8 +104,15 @@ export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld
     }
   };
   const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') hover.clear(); };
+  const contextMenu = (event: MouseEvent) => {
+    const hit = lighthouseAt(host, getWorld(), getCamera(), event.clientX, event.clientY);
+    if (!hit) return;
+    event.preventDefault();
+    openMenu(hit.id, event.clientX, event.clientY);
+  };
   host.ownerDocument?.addEventListener('keydown', escape);
   host.addEventListener('pointerdown', down);
+  host.addEventListener('contextmenu', contextMenu);
   host.addEventListener('pointerleave', hover.clear);
   host.addEventListener('blur', hover.clear);
   host.addEventListener('pointermove', move);
@@ -79,6 +127,7 @@ export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld
       host.removeEventListener('pointerleave', hover.clear);
       host.removeEventListener('blur', hover.clear);
       host.removeEventListener('pointerdown', down);
+      host.removeEventListener('contextmenu', contextMenu);
       host.removeEventListener('pointermove', move);
       host.removeEventListener('pointerup', up);
       host.removeEventListener('pointercancel', up);
@@ -86,6 +135,7 @@ export function attachCameraControls(host: HTMLDivElement, { getCamera, getWorld
       host.removeEventListener('wheel', wheel);
       host.removeEventListener('keydown', key);
     if (drag && host.hasPointerCapture(drag.id)) host.releasePointerCapture(drag.id);
+    cancelLongPress();
     host.classList.remove('dragging');
   }, { clearHover: hover.clear, revalidateHover: hover.revalidate });
 }

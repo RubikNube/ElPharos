@@ -15,13 +15,13 @@ function setup() {
     focus: vi.fn(), setPointerCapture: vi.fn(), hasPointerCapture: () => false,
     classList: { add: vi.fn(), remove: vi.fn() },
   }) as unknown as HTMLDivElement;
-  const onHover = vi.fn(), onSelect = vi.fn();
+  const onHover = vi.fn(), onSelect = vi.fn(), onContextMenu = vi.fn(), onMapNavigate = vi.fn();
   const camera = { x: 0, y: 0, zoom: 1 };
-  const controls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render: vi.fn(), zoom: vi.fn(), reset: vi.fn(), onHover, onSelect });
+  const controls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render: vi.fn(), zoom: vi.fn(), reset: vi.fn(), onHover, onSelect, onContextMenu, onMapNavigate, getSelectedId: () => 'beacon-0' });
   function event(type: string, x = 110, extra = {}) {
     host.dispatchEvent(Object.assign(new Event(type), { clientX: x, clientY: 120, pointerId: 1, button: 0, pointerType: 'mouse', ...extra }));
   }
-  return { world, camera, controls, event, onHover, onSelect };
+  return { world, camera, controls, event, onHover, onSelect, onContextMenu, onMapNavigate };
 }
 afterEach(() => vi.useRealTimers());
 
@@ -101,6 +101,44 @@ it('selects with a click or touch tap but preserves selection while dragging', (
   s.event('pointerup', 210, { pointerType: 'touch' });
   expect(s.onSelect).toHaveBeenLastCalledWith('beacon-0');
   s.controls();
+});
+
+it('opens actions on a discovered marker with right click or keyboard and keeps the browser menu elsewhere', () => {
+  const s = setup();
+  const rightClick = new Event('contextmenu', { cancelable: true });
+  s.event('contextmenu', 110, { clientY: 120, preventDefault: () => rightClick.preventDefault() });
+  expect(rightClick.defaultPrevented).toBe(true);
+  expect(s.onContextMenu).toHaveBeenLastCalledWith({ id: 'beacon-0', x: 100, y: 100 });
+  expect(s.onSelect).toHaveBeenLastCalledWith('beacon-0');
+  s.onContextMenu.mockClear();
+  s.event('contextmenu', 910);
+  expect(s.onContextMenu).not.toHaveBeenCalled();
+  s.event('keydown', 110, { key: 'F10', shiftKey: true });
+  expect(s.onContextMenu).toHaveBeenCalledWith(expect.objectContaining({ id: 'beacon-0' }));
+  s.controls();
+});
+
+it('opens on touch long press, but cancels for drag, release, and disposal', () => {
+  const s = setup();
+  s.event('pointerdown', 110, { pointerType: 'touch' });
+  vi.advanceTimersByTime(500);
+  expect(s.onContextMenu).toHaveBeenCalledExactlyOnceWith({ id: 'beacon-0', x: 100, y: 100 });
+  s.event('pointerup', 110, { pointerType: 'touch' });
+  expect(s.onSelect).toHaveBeenCalledTimes(1);
+  s.onContextMenu.mockClear();
+  s.event('pointerdown', 110, { pointerType: 'touch' });
+  s.event('pointermove', 210, { pointerType: 'touch' });
+  vi.advanceTimersByTime(500);
+  expect(s.onContextMenu).not.toHaveBeenCalled();
+  s.event('pointerup', 210, { pointerType: 'touch' });
+  s.event('pointerdown', 110, { pointerType: 'touch' });
+  s.event('pointerup', 110, { pointerType: 'touch' });
+  vi.advanceTimersByTime(500);
+  expect(s.onContextMenu).not.toHaveBeenCalled();
+  s.event('pointerdown', 110, { pointerType: 'touch' });
+  s.controls();
+  vi.advanceTimersByTime(500);
+  expect(s.onContextMenu).not.toHaveBeenCalled();
 });
 
 it('anchors hover and selection to the visible periodic copy', () => {

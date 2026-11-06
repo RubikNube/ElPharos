@@ -9,7 +9,7 @@ import type { RenderShip } from './shipAnimation';
 import type { LighthouseHover } from './lighthouseHover';
 import { shipAt } from './shipHover';
 
-export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void, onHover?: (hover: LighthouseHover) => void) {
+export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void, onHover?: (hover: LighthouseHover) => void, onContextMenu?: (target: { id: string; x: number; y: number }) => void, onMapNavigate?: () => void, getSelectedId?: () => string | null) {
   const app = new Application();
   await app.init({
     width: host.clientWidth, height: host.clientHeight,
@@ -127,11 +127,13 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     app.render();
   }
   function reset() {
+    onMapNavigate?.();
     removeControls.clearHover();
     if (world) camera = focusHaven(app.screen.width, app.screen.height, world);
     render();
   }
   function zoom(factor: number, x = app.screen.width / 2, y = app.screen.height / 2) {
+    onMapNavigate?.();
     removeControls.clearHover();
     camera = zoomAt(camera, x, y, factor);
     render();
@@ -147,7 +149,7 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     syncTiles();
     animator.update(world, [...tiles.values()].flatMap(tile => tile.ships));
   }
-  const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect, onHover,
+  const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect, onHover, onContextMenu, onMapNavigate, getSelectedId,
     shipAt: (x, y) => shipAt([...tiles.values()].map(tile => ({ x: tile.terrain.position.x, y: tile.terrain.position.y, ships: tile.ships })), camera, host.getBoundingClientRect(), x, y) });
   const observer = new ResizeObserver(() => {
     removeControls.clearHover();
