@@ -1,5 +1,5 @@
 //! Authoritative construction economy and automatic cargo shipping.
-use crate::domain::{Point, WorldState};
+use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
 pub const CAPACITY: u32 = 300;
@@ -52,9 +52,6 @@ impl Default for Salvage {
             yards: vec![],
         }
     }
-}
-fn distance(a: &Point, b: &Point) -> f64 {
-    (a.x - b.x).hypot(a.y - b.y)
 }
 impl WorldState {
     pub fn restore_salvage_yard(&mut self, id: &str) -> Result<bool, &'static str> {
@@ -147,7 +144,8 @@ impl WorldState {
             for &v in &network.neighbors[u] {
                 if !done[v] {
                     let next = cost[u]
-                        + distance(&self.lighthouses[u].position, &self.lighthouses[v].position);
+                        + self
+                            .distance(&self.lighthouses[u].position, &self.lighthouses[v].position);
                     if next < cost[v] {
                         cost[v] = next;
                         prev[v] = Some(u);
@@ -258,13 +256,13 @@ impl WorldState {
             let b = network.lighthouse_by_id[&ship.to];
             if !connected[a]
                 || !connected[b]
-                || !Self::overlap(&self.lighthouses[a], &self.lighthouses[b])
+                || !self.overlap(&self.lighthouses[a], &self.lighthouses[b])
             {
                 continue;
             }
             ship.progress = (ship.progress
                 + rules.link_speed(&self.lighthouses[a], &self.lighthouses[b])
-                    / distance(&self.lighthouses[a].position, &self.lighthouses[b].position))
+                    / self.distance(&self.lighthouses[a].position, &self.lighthouses[b].position))
             .min(1.0);
             if ship.progress >= 1.0 {
                 ship.from = ship.to.clone();

@@ -5,10 +5,10 @@ import { serverMessageSchema, worldSchema } from './protocol';
 
 it('rejects incompatible protocol versions and invalid geometry', () => {
   expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 119, message: 'test' }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 11, world: {
+  expect(serverMessageSchema.safeParse({ type: 'world_snapshot', protocol_version: 12, world: {
     research: null, salvage: null, objective_complete: false, shipping_links: [], revision: 0, width: -1, height: 100, islands: [], lighthouses: [],
   } }).success).toBe(false);
-  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 11, message: 'Unknown lighthouse' }).success).toBe(true);
+  expect(serverMessageSchema.safeParse({ type: 'error', protocol_version: 12, message: 'Unknown lighthouse' }).success).toBe(true);
 });
 
 it('validates fuel and simulation state from the authoritative snapshot', () => {

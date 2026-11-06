@@ -58,20 +58,18 @@ impl WorldState {
             };
             let a = point(haven.radius + 16.0);
             let b = point(haven.radius + 116.0);
-            let inside = |p: &Point| {
-                p.x >= 16.0 && p.y >= 16.0 && p.x <= self.width - 16.0 && p.y <= self.height - 16.0
-            };
-            if !inside(&a) || !inside(&b) {
-                continue;
-            }
             let dx = b.x - a.x;
             let dy = b.y - a.y;
             if self.islands.iter().all(|island| {
-                let t = (((island.position.x - a.x) * dx + (island.position.y - a.y) * dy)
-                    / (dx * dx + dy * dy))
-                    .clamp(0.0, 1.0);
-                (a.x + t * dx - island.position.x).hypot(a.y + t * dy - island.position.y)
-                    >= island.radius + 12.0
+                (-1..=1).all(|ix| {
+                    (-1..=1).all(|iy| {
+                        let x = island.position.x + f64::from(ix) * self.width;
+                        let y = island.position.y + f64::from(iy) * self.height;
+                        let t = (((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy))
+                            .clamp(0.0, 1.0);
+                        (a.x + t * dx - x).hypot(a.y + t * dy - y) >= island.radius + 12.0
+                    })
+                })
             }) {
                 return Some([a, b]);
             }

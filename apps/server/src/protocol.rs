@@ -1,7 +1,7 @@
 use crate::domain::WorldState;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u8 = 11;
+pub const VERSION: u8 = 12;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]

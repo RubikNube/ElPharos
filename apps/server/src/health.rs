@@ -43,8 +43,7 @@ impl WorldState {
         }
         if !self.lighthouses.iter().any(|l| {
             l.explored_radius > 0.0
-                && (l.position.x - light.position.x).hypot(l.position.y - light.position.y)
-                    <= l.explored_radius
+                && self.distance(&l.position, &light.position) <= l.explored_radius
         }) {
             return Err("Lighthouse is undiscovered");
         }
@@ -106,8 +105,7 @@ impl WorldState {
             .iter()
             .find(|l| l.id == voyage.destination)
             .unwrap();
-        let distance =
-            (haven.position.x - target.position.x).hypot(haven.position.y - target.position.y);
+        let distance = self.distance(&haven.position, &target.position);
         voyage.progress += if distance == 0.0 {
             1.0
         } else {
@@ -141,8 +139,7 @@ pub fn validate(world: &WorldState) -> Result<(), String> {
                 .any(|i| i.id == target.island_id && i.fuel_facility == FuelFacility::Haven)
             || !world.lighthouses.iter().any(|l| {
                 l.explored_radius > 0.0
-                    && (l.position.x - target.position.x).hypot(l.position.y - target.position.y)
-                        <= l.explored_radius
+                    && world.distance(&l.position, &target.position) <= l.explored_radius
             })
         {
             return Err("Invalid doctor voyage".into());

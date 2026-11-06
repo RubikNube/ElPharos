@@ -1,4 +1,5 @@
 pub mod domain;
+mod geometry;
 pub mod health;
 mod network;
 pub mod persistence;

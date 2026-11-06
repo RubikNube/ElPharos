@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 
 const point = z.object({ x: z.number(), y: z.number() });
 const island = z.object({

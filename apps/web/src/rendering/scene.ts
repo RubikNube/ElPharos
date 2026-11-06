@@ -1,10 +1,11 @@
-import { Application, Container } from 'pixi.js';
+import { Application, Container, Graphics, RenderTexture, Sprite } from 'pixi.js';
 import type { WorldState } from '../protocol';
-import { fitWorld, zoomAt, type Camera } from './camera';
+import { focusHaven, normalizeCamera, visibleTiles, zoomAt, type Camera } from './camera';
 import { attachCameraControls } from './cameraControls';
-import { buildWorldLayers } from './worldLayers';
+import { buildWorldLayers, terrainKey } from './worldLayers';
 import { drawSelection } from './selectionLayer';
 import { createShipAnimator } from './shipAnimation';
+import type { RenderShip } from './shipAnimation';
 import type { LighthouseHover } from './lighthouseHover';
 
 export async function createScene(host: HTMLDivElement, signal: AbortSignal, onSelect: (id: string | null) => void, onHover?: (hover: LighthouseHover) => void) {
@@ -26,7 +27,98 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
   let fitted = false;
   let disposed = false;
   const animator = createShipAnimator(render);
+  let terrainTexture: RenderTexture | null = null;
+  let textureWidth = 0, textureHeight = 0;
+  let cachedTerrainKey: string | null = null;
+  function updateTerrain() {
+    if (!world) {
+      terrainTexture?.destroy(true);
+      terrainTexture = null;
+      cachedTerrainKey = null;
+      return;
+    }
+    const key = terrainKey(world);
+    if (key === cachedTerrainKey) return;
+    if (terrainTexture && (textureWidth !== world.width || textureHeight !== world.height)) {
+      terrainTexture.destroy(true);
+      terrainTexture = null;
+    }
+    if (!terrainTexture) {
+      const renderer = app.renderer;
+      const limit = 'gl' in renderer ? renderer.gl.getParameter(renderer.gl.MAX_TEXTURE_SIZE) as number : 2048;
+      const resolution = Math.min(2, Math.min(2048, limit) / Math.max(world.width, world.height));
+      textureWidth = world.width;
+      textureHeight = world.height;
+      terrainTexture = RenderTexture.create({ width: world.width, height: world.height, resolution, antialias: false });
+    }
+    const built = buildWorldLayers(world, 'terrain');
+    try {
+      app.renderer.render({ container: built.worldLayer, target: terrainTexture, clear: true });
+      cachedTerrainKey = key;
+    } finally {
+      built.worldLayer.destroy({ children: true });
+      built.shipLayer.destroy({ children: true });
+    }
+  }
+  type Tile = { terrain: Container; selection: Container; ships: RenderShip[] };
+  const tiles = new Map<string, Tile>();
+  function clearTiles() {
+    for (const tile of tiles.values()) {
+      tile.terrain.destroy({ children: true });
+      tile.selection.destroy({ children: true });
+    }
+    tiles.clear();
+  }
+  function clip(content: Container) {
+    const container = new Container();
+    // A polygon keeps Pixi on stencil masking; nested scissor rectangles leave gaps when panning.
+    const mask = new Graphics().poly([0, 0, world!.width, 0, world!.width, world!.height, 0, world!.height]).fill(0xffffff);
+    container.addChild(content, mask);
+    content.mask = mask;
+    return container;
+  }
+  function syncTiles() {
+    if (!world) return;
+    const visible = visibleTiles(camera, app.screen.width, app.screen.height, world);
+    const keys = new Set(visible.map(tile => `${tile.x},${tile.y}`));
+    let changed = false;
+    const spare: Tile[] = [];
+    for (const [key, tile] of tiles) {
+      if (keys.has(key)) continue;
+      spare.push(tile);
+      tiles.delete(key);
+      changed = true;
+    }
+    for (const position of visible) {
+      const key = `${position.x},${position.y}`;
+      if (tiles.has(key)) continue;
+      let tile = spare.pop();
+      if (!tile) {
+        const built = buildWorldLayers(world, 'ships');
+        built.worldLayer.destroy({ children: true });
+        const selectionContent = new Container();
+        drawSelection(selectionContent, world, selectedId);
+        const content = new Container();
+        const sprite = new Sprite(terrainTexture!);
+        sprite.width = world.width;
+        sprite.height = world.height;
+        content.addChild(sprite, built.shipLayer);
+        tile = { terrain: clip(content), selection: clip(selectionContent), ships: built.ships };
+        worldLayer.addChild(tile.terrain); overlay.addChild(tile.selection);
+      }
+      tile.terrain.position.set(position.x*world.width, position.y*world.height);
+      tile.selection.position.copyFrom(tile.terrain.position);
+      tiles.set(key, tile);
+      changed = true;
+    }
+    for (const tile of spare) {
+      tile.terrain.destroy({ children: true }); tile.selection.destroy({ children: true });
+    }
+    if (changed) animator.replaceShips([...tiles.values()].flatMap(tile => tile.ships));
+  }
   function render() {
+    if (world) camera = normalizeCamera(camera, world);
+    syncTiles();
     worldLayer.position.set(camera.x, camera.y);
     worldLayer.scale.set(camera.zoom);
     overlay.position.copyFrom(worldLayer.position);
@@ -35,7 +127,7 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
   }
   function reset() {
     removeControls.clearHover();
-    if (world) camera = fitWorld(app.screen.width, app.screen.height, world.width, world.height);
+    if (world) camera = focusHaven(app.screen.width, app.screen.height, world);
     render();
   }
   function zoom(factor: number, x = app.screen.width / 2, y = app.screen.height / 2) {
@@ -47,12 +139,12 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
   function setWorld(next: WorldState | null) {
     world = next;
     removeControls.revalidateHover();
-    for (const child of worldLayer.removeChildren()) child.destroy({ children: true });
-    const layers = world ? buildWorldLayers(world) : null;
-    if (layers) worldLayer.addChild(layers.worldLayer);
-    drawSelection(overlay, world, selectedId);
-    if (world && !fitted) { fitted = true; reset(); }
-    animator.update(world, layers?.ships ?? []);
+    clearTiles();
+    updateTerrain();
+    if (world && !fitted) { fitted = true; camera = focusHaven(app.screen.width, app.screen.height, world); }
+    if (world) camera = normalizeCamera(camera, world);
+    syncTiles();
+    animator.update(world, [...tiles.values()].flatMap(tile => tile.ships));
   }
   const removeControls = attachCameraControls(host, { getCamera: () => camera, getWorld: () => world, render, zoom, reset, onSelect, onHover });
   const observer = new ResizeObserver(() => {
@@ -67,7 +159,9 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
     reset, zoom, setWorld,
     setSelection(id: string | null) {
       selectedId = id;
-      drawSelection(overlay, world, id);
+      for (const tile of tiles.values()) {
+        drawSelection(tile.selection.children[0] as Container, world, id);
+      }
       render();
     },
     dispose() {
@@ -76,6 +170,9 @@ export async function createScene(host: HTMLDivElement, signal: AbortSignal, onS
       animator.dispose();
       observer.disconnect();
       removeControls();
+      clearTiles();
+      terrainTexture?.destroy(true);
+      terrainTexture = null;
       app.destroy(true, { children: true });
     },
   };

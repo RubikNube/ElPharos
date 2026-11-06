@@ -32,7 +32,7 @@ impl NetworkView {
                 pending.push(i);
             }
             for (j, other) in world.lighthouses.iter().enumerate().take(i) {
-                if light.active && other.active && WorldState::overlap(light, other) {
+                if light.active && other.active && world.overlap(light, other) {
                     edges[i].push(j);
                     edges[j].push(i);
                 }
@@ -71,8 +71,7 @@ impl NetworkView {
     pub fn illuminates(&self, world: &WorldState, position: &Point) -> bool {
         world.lighthouses.iter().enumerate().any(|(i, light)| {
             self.connected[i]
-                && (position.x - light.position.x).hypot(position.y - light.position.y)
-                    <= light.effective_radius()
+                && world.distance(position, &light.position) <= light.effective_radius()
         })
     }
 

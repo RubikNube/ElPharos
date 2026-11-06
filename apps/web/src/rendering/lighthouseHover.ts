@@ -1,3 +1,4 @@
+import { distance, nearest } from '../geometry';
 import type { WorldState } from '../protocol';
 import { keeperIdentity } from '../state/keeper';
 import type { Camera } from './camera';
@@ -9,7 +10,7 @@ export function lighthouseAt(host: HTMLDivElement, world: WorldState | null, cam
   const bounds = host.getBoundingClientRect();
   const x = (clientX - bounds.left - camera.x) / camera.zoom;
   const y = (clientY - bounds.top - camera.y) / camera.zoom;
-  return world && [...world.lighthouses].reverse().find(light => isDiscovered(world, light.position) && Math.hypot(light.position.x - x, light.position.y - y) <= 45);
+  return world && [...world.lighthouses].reverse().find(light => isDiscovered(world, light.position) && distance(world, light.position, { x, y }) <= 45);
 }
 
 export function createLighthouseHover(host: HTMLDivElement, getWorld: () => WorldState | null, getCamera: () => Camera, onHover: (hover: LighthouseHover) => void) {
@@ -37,7 +38,9 @@ export function createLighthouseHover(host: HTMLDivElement, getWorld: () => Worl
     clear();
     pointer = { x: event.clientX, y: event.clientY };
     const camera = getCamera();
-    target = { id: light.id, identity: keeperIdentity(light), x: camera.x + light.position.x * camera.zoom, y: camera.y + light.position.y * camera.zoom };
+    const bounds = host.getBoundingClientRect();
+    const copy = nearest(getWorld()!, { x: (event.clientX-bounds.left-camera.x)/camera.zoom, y: (event.clientY-bounds.top-camera.y)/camera.zoom }, light.position);
+    target = { id: light.id, identity: keeperIdentity(light), x: camera.x + copy.x * camera.zoom, y: camera.y + copy.y * camera.zoom };
     timer = setTimeout(() => { revalidate(); if (target) onHover(target); }, 600);
   }
   return { move, clear, revalidate };

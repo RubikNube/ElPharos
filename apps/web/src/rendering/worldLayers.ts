@@ -1,19 +1,23 @@
+import { distance, images, nearest } from '../geometry';
 import { Container, Graphics, Text } from 'pixi.js';
 import type { WorldState } from '../protocol';
 import type { RenderShip } from './shipAnimation';
 import { isDiscovered } from './visibility';
 
-export function buildWorldLayers(world: WorldState) {
-    const nextWorld = world;
-    const worldLayer = new Container({ isRenderGroup: true });
+// Select a pass so dynamic updates never construct terrain graphics or labels.
+export function buildWorldLayers(world: WorldState, pass: 'all' | 'terrain' | 'ships' = 'all') {
+    const copies = <T extends { position: { x: number; y: number } }>(entities: T[]) => entities.flatMap(entity =>
+      images(world, entity.position, -world.radius_max-200, -world.radius_max-200, world.width+world.radius_max+200, world.height+world.radius_max+200).map(position => ({ ...entity, position })));
+    const nextWorld = pass === 'ships' ? world : { ...world, islands: copies(world.islands), lighthouses: copies(world.lighthouses) };
+    const worldLayer = new Container();
     const ships: RenderShip[] = [];
+    const shipLayer = new Container();
     function terrainLayer() {
       const terrain = new Container();
       // Ocean dimensions and every entity's position/radius are server-owned.
-      terrain.addChild(new Graphics().rect(0, 0, nextWorld.width, nextWorld.height).fill(0x0f2234)
-        .stroke({ color: 0x284356, width: 2 }));
+      terrain.addChild(new Graphics().rect(0, 0, nextWorld.width, nextWorld.height).fill(0x0f2234));
       for (const island of nextWorld.islands) {
-        if (!isDiscovered(nextWorld, island.position)) continue;
+        if (!isDiscovered(world, island.position)) continue;
         const { x, y } = island.position;
         terrain.addChild(new Graphics()
           .ellipse(x, y + 6, island.radius * 1.16, island.radius * 0.83).fill({ color: 0x315564, alpha: 0.4 })
@@ -25,7 +29,7 @@ export function buildWorldLayers(world: WorldState) {
         terrain.addChild(label);
       }
       for (const lighthouse of nextWorld.lighthouses) {
-        if (!isDiscovered(nextWorld, lighthouse.position)) continue;
+        if (!isDiscovered(world, lighthouse.position)) continue;
         const { x, y } = lighthouse.position;
         if (lighthouse.sick) {
         terrain.addChild(new Graphics().circle(x + 27, y - 28, 12).fill(0x933f4c)
@@ -50,55 +54,80 @@ export function buildWorldLayers(world: WorldState) {
       }
       return terrain;
     }
-    worldLayer.addChild(new Graphics().rect(0, 0, world.width, world.height).fill(0x192331));
-    for (const current of [false, true]) {
-      const terrain = terrainLayer();
-      terrain.alpha = current ? 1 : 0.35;
-      const mask = new Graphics();
-      for (const light of world.lighthouses) {
-        const radius = current ? (light.active ? light.effective_radius : 0) : light.explored_radius;
-        if (radius > 0) mask.circle(light.position.x, light.position.y, radius).fill(0xffffff);
-      }
-      worldLayer.addChild(terrain, mask);
-      terrain.mask = mask;
-    }
-    // Server-owned links always lie inside the union of connected light circles.
-    for (const [index, link] of world.shipping_links.entries()) {
-      const from = world.lighthouses.find(light => light.id === link.from);
-      const to = world.lighthouses.find(light => light.id === link.to);
-      if (!from || !to || !isDiscovered(world, from.position) || !isDiscovered(world, to.position)) continue;
-      worldLayer.addChild(new Graphics().moveTo(from.position.x, from.position.y)
-        .lineTo(to.position.x, to.position.y).stroke({ color: 0xffd34d, alpha: 0.45, width: 2 }));
-      if (world.salvage) continue;
-      const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(0xffedb3)
-        .stroke({ color: 0x081521, width: 2 });
-      worldLayer.addChild(graphic);
-      ships.push({ graphic, from: from.position, to: to.position, offset: index * 0.37 });
-    }
-    for (const cargo of world.salvage?.ships ?? []) {
-      const from = world.lighthouses.find(l => l.id === cargo.from), to = world.lighthouses.find(l => l.id === cargo.to);
-      if (!from || !to || !isDiscovered(world, from.position)) continue;
-      const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(cargo.cargo ? 0xf3b45c : 0xadc7d7).stroke({color: 0x081521, width: 2});
-      worldLayer.addChild(graphic);
-      ships.push({graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && Math.hypot(from.position.x-to.position.x, from.position.y-to.position.y) <= from.effective_radius+to.effective_radius});
-    }
-    if (world.doctor) {
-      const haven = world.islands.find(i => i.fuel_facility === 'haven');
-      const target = world.lighthouses.find(l => l.id === world.doctor!.destination);
-      if (haven && target) {
-        const graphic = new Graphics().poly([18, 0, -12, -9, -16, 0, -12, 9]).fill(0xeee5cc)
-          .stroke({ color: 0x081521, width: 2 }).rect(-5, -6, 4, 12).fill(0xc74555).rect(-9, -2, 12, 4).fill(0xc74555);
-        worldLayer.addChild(graphic);
-        ships.push({ graphic, from: haven.position, to: target.position, offset: 0, doctor: world.doctor });
+    if (pass !== 'ships') {
+      worldLayer.addChild(new Graphics().rect(0, 0, world.width, world.height).fill(0x192331));
+      for (const current of [false, true]) {
+        const terrain = terrainLayer();
+        terrain.alpha = current ? 1 : 0.35;
+        const mask = new Graphics();
+        for (const light of nextWorld.lighthouses) {
+          const radius = current ? (light.active ? light.effective_radius : 0) : light.explored_radius;
+          if (radius > 0) mask.circle(light.position.x, light.position.y, radius).fill(0xffffff);
+        }
+        worldLayer.addChild(terrain, mask);
+        terrain.mask = mask;
       }
     }
-    const vessel = world.salvage?.vessel;
-    const route = world.salvage?.vessel_route;
-    if (vessel && route) {
-      const graphic = new Graphics().poly([22, 0, 10, -10, -16, -10, -20, -5, -20, 5, -16, 10, 10, 10]).fill(vessel.cargo ? 0xf3b45c : 0xadc7d7)
-        .stroke({ color: 0x081521, width: 2 }).rect(-9, -5, 12, 10).fill(0xeee5cc);
-      worldLayer.addChild(graphic);
-      ships.push({ graphic, from: route[0], to: route[1], offset: 0, vessel, travelSeconds: world.salvage!.rules.vessel.travel_seconds });
+    const intersectsTile = (from: { x: number; y: number }, to: { x: number; y: number }) =>
+      Math.max(from.x, to.x) >= -24 && Math.min(from.x, to.x) <= world.width+24 &&
+      Math.max(from.y, to.y) >= -24 && Math.min(from.y, to.y) <= world.height+24;
+    for (let ix = -2; ix <= 2; ix++) for (let iy = -2; iy <= 2; iy++) {
+      const shifted = (point: { x: number; y: number }) => ({ x: point.x+ix*world.width, y: point.y+iy*world.height });
+      // Server-owned links always lie inside the union of connected light circles.
+      for (const [index, link] of world.shipping_links.entries()) {
+        const source = world.lighthouses.find(light => light.id === link.from);
+        const from = source && { ...source, position: shifted(source.position) };
+        const target = world.lighthouses.find(light => light.id === link.to);
+        const to = target && from && { ...target, position: shifted(nearest(world, source!.position, target.position)) };
+        if (!from || !to || !intersectsTile(from.position, to.position) || !isDiscovered(world, from.position) || !isDiscovered(world, to.position)) continue;
+        if (pass !== 'ships') worldLayer.addChild(new Graphics().moveTo(from.position.x, from.position.y)
+          .lineTo(to.position.x, to.position.y).stroke({ color: 0xffd34d, alpha: 0.45, width: 2 }));
+        if (pass === 'terrain' || world.salvage) continue;
+        const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(0xffedb3)
+          .stroke({ color: 0x081521, width: 2 });
+        shipLayer.addChild(graphic);
+        ships.push({ graphic, from: from.position, to: to.position, offset: index * 0.37 });
+      }
+      if (pass === 'terrain') continue;
+      for (const cargo of world.salvage?.ships ?? []) {
+        const source = world.lighthouses.find(l => l.id === cargo.from), target = world.lighthouses.find(l => l.id === cargo.to);
+        const from = source && { ...source, position: shifted(source.position) };
+        const to = target && from && { ...target, position: shifted(nearest(world, source!.position, target.position)) };
+        if (!from || !to || !intersectsTile(from.position, to.position) || !isDiscovered(world, from.position)) continue;
+        const graphic = new Graphics().poly([12, 0, -8, -6, -5, 0, -8, 6]).fill(cargo.cargo ? 0xf3b45c : 0xadc7d7).stroke({color: 0x081521, width: 2});
+        shipLayer.addChild(graphic);
+        ships.push({graphic, from: from.position, to: to.position, offset: 0, cargo, safe: from.connected && to.connected && distance(world, from.position, to.position) <= from.effective_radius+to.effective_radius});
+      }
+      if (world.doctor) {
+        const haven = world.islands.find(i => i.fuel_facility === 'haven');
+        const target = world.lighthouses.find(l => l.id === world.doctor!.destination);
+        if (haven && target && intersectsTile(shifted(haven.position), shifted(nearest(world, haven.position, target.position)))) {
+          const graphic = new Graphics().poly([18, 0, -12, -9, -16, 0, -12, 9]).fill(0xeee5cc)
+            .stroke({ color: 0x081521, width: 2 }).rect(-5, -6, 4, 12).fill(0xc74555).rect(-9, -2, 12, 4).fill(0xc74555);
+          shipLayer.addChild(graphic);
+          ships.push({ graphic, from: shifted(haven.position), to: shifted(nearest(world, haven.position, target.position)), offset: 0, doctor: world.doctor });
+        }
+      }
+      const vessel = world.salvage?.vessel;
+      const route = world.salvage?.vessel_route;
+      if (vessel && route && intersectsTile(shifted(route[0]), shifted(route[1]))) {
+        const graphic = new Graphics().poly([22, 0, 10, -10, -16, -10, -20, -5, -20, 5, -16, 10, 10, 10]).fill(vessel.cargo ? 0xf3b45c : 0xadc7d7)
+          .stroke({ color: 0x081521, width: 2 }).rect(-9, -5, 12, 10).fill(0xeee5cc);
+        shipLayer.addChild(graphic);
+        ships.push({ graphic, from: shifted(route[0]), to: shifted(route[1]), offset: 0, vessel, travelSeconds: world.salvage!.rules.vessel.travel_seconds });
+      }
     }
-  return { worldLayer, ships };
+  return { worldLayer, shipLayer, ships };
+}
+
+// Only fields consumed by the terrain pass belong here; simulation counters and
+// ship progress must not invalidate the shared texture.
+export function terrainKey(world: WorldState): string {
+  return JSON.stringify([
+    world.width, world.height, world.radius_max,
+    world.islands.map(({ position, radius, name }) => [position, radius, name]),
+    world.lighthouses.map(({ id, position, active, effective_radius, explored_radius, sick }) =>
+      [id, position, active, effective_radius, explored_radius, sick]),
+    world.shipping_links,
+  ]);
 }

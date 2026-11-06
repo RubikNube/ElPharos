@@ -102,3 +102,14 @@ it('selects with a click or touch tap but preserves selection while dragging', (
   expect(s.onSelect).toHaveBeenLastCalledWith('beacon-0');
   s.controls();
 });
+
+it('anchors hover and selection to the visible periodic copy', () => {
+  const s = setup();
+  s.event('pointermove', 110 + s.world.width);
+  vi.advanceTimersByTime(600);
+  expect(s.onHover).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'beacon-0', x: 100+s.world.width, y: 100 }));
+  s.event('pointerdown', 110 + s.world.width);
+  s.event('pointerup', 110 + s.world.width);
+  expect(s.onSelect).toHaveBeenLastCalledWith('beacon-0');
+  s.controls();
+});

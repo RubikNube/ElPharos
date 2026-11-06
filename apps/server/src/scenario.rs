@@ -185,7 +185,7 @@ fn playable(world: &WorldState) -> bool {
     if crate::validation::validate(world).is_err() {
         return false;
     }
-    let distance = |a: &Point, b: &Point| (a.x - b.x).hypot(a.y - b.y);
+    let distance = |a: &Point, b: &Point| world.distance(a, b);
     for (i, island) in world.islands.iter().enumerate() {
         if world.islands[..i].iter().any(|other| {
             distance(&island.position, &other.position) < island.radius + other.radius + 20.0

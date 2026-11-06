@@ -173,9 +173,8 @@ impl WorldState {
         crate::network::NetworkView::new(self).connected
     }
 
-    pub fn overlap(a: &Lighthouse, b: &Lighthouse) -> bool {
-        (a.position.x - b.position.x).hypot(a.position.y - b.position.y)
-            <= a.effective_radius() + b.effective_radius()
+    pub fn overlap(&self, a: &Lighthouse, b: &Lighthouse) -> bool {
+        self.distance(&a.position, &b.position) <= a.effective_radius() + b.effective_radius()
     }
 
     pub fn facility_production(&self, island: &Island, connected: &[bool]) -> u32 {
@@ -230,9 +229,7 @@ impl WorldState {
 
     pub fn is_illuminated(&self, position: &Point) -> bool {
         self.lighthouses.iter().any(|light| {
-            light.active
-                && (position.x - light.position.x).hypot(position.y - light.position.y)
-                    <= light.effective_radius()
+            light.active && self.distance(position, &light.position) <= light.effective_radius()
         })
     }
 

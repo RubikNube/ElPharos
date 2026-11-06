@@ -117,9 +117,7 @@ impl WorldState {
             .is_some_and(|island| {
                 self.lighthouses.iter().any(|light| {
                     light.explored_radius > 0.0
-                        && (light.position.x - island.position.x)
-                            .hypot(light.position.y - island.position.y)
-                            <= light.explored_radius
+                        && self.distance(&light.position, &island.position) <= light.explored_radius
                 })
             })
     }

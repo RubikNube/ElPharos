@@ -316,8 +316,19 @@ try:
     req('POST', route + '/window/rect', {'width': 1440, 'height': 1000})
     time.sleep(.2)
     js("document.querySelector('.map-controls button:nth-child(2)').click()")
-    # Hit the first lighthouse using fit-to-world geometry read from the canvas host.
-    coords = js("const r=document.querySelector('.map').getBoundingClientRect(); const z=Math.max(.15, Math.min(4, Math.min(r.width/2400,r.height/1000)*.9)); return [r.x+r.width/2+(800-1200)*z,r.y+r.height/2+(480-500)*z]")
+    # Reset centers the first lighthouse without exposing unexplored map dimensions.
+    coords = js("const r=document.querySelector('.map').getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2]")
+    # Scroll across multiple world periods on both axes and click the visible Haven copy.
+    js("document.querySelector('.map').addEventListener('pointerdown', event => { window.wrapPointerId=event.pointerId; }, {once:true})")
+    req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerMove','duration':0,'x':round(coords[0]),'y':round(coords[1])},{'type':'pointerDown','button':0}]}]})
+    js("const m=document.querySelector('.map'), r=m.getBoundingClientRect(); m.dispatchEvent(new PointerEvent('pointermove',{pointerId:window.wrapPointerId,clientX:Math.round(r.x+r.width/2)+3*2400*Math.max(.15,Math.min(4,Math.min(r.width,r.height)/800)),clientY:Math.round(r.y+r.height/2)+3*1000*Math.max(.15,Math.min(4,Math.min(r.width,r.height)/800)),bubbles:true}))")
+    req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerUp','button':0}]}]})
+    repeated = coords
+    req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type':'pointerMove','duration':0,'x':round(repeated[0]),'y':round(repeated[1])},{'type':'pointerDown','button':0},{'type':'pointerUp','button':0}]}]})
+    assert js("return document.querySelector('h2').innerText === 'First Light'")
+    screenshot('wrapped')
+    js("document.querySelectorAll('nav button')[1].click(); document.querySelector('.map-controls button:nth-child(2)').click()")
+
     def hover_first_light():
         req('POST', route + '/actions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 0, 'x': round(coords[0]), 'y': round(coords[1])}]}]})
         time.sleep(.75)

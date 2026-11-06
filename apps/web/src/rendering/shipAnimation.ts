@@ -79,6 +79,10 @@ export function createShipAnimator(render: () => void) {
 
 
   return {
+    replaceShips(nextShips: RenderShip[]) {
+      ships = nextShips;
+      positionShips(performance.now());
+    },
     update(next: WorldState | null, nextShips: RenderShip[]) {
       world = next;
       ships = nextShips;
